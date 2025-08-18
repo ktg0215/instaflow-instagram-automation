@@ -1,0 +1,74 @@
+﻿version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15
+    container_name: instaflow-db
+    environment:
+      - POSTGRES_DB=instaflow
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - TZ=Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - instaflow-network
+    restart: unless-stopped
+
+  # pgAdmin (Database Management Tool)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: instaflow-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@instaflow.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - TZ=Asia/Tokyo
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - instaflow-network
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: instaflow-app
+    ports:
+      - "3010:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-development-secret-key-replace-in-production}
+      - JWT_SECRET=${JWT_SECRET:-development-jwt-secret-replace-in-production}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/instaflow
+      - INSTAGRAM_ACCESS_TOKEN=${INSTAGRAM_ACCESS_TOKEN}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - TZ=Asia/Tokyo
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - instaflow-network
+    depends_on:
+      - db
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  instaflow-network:
+    driver: bridge

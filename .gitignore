@@ -39,3 +39,57 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Test and debug files
+*test*.js
+*debug*.js
+*test*.png
+*debug*.png
+*error*.png
+*success*.png
+*final*.png
+*visual*.js
+*manual*.js
+*comprehensive*.js
+*playwright*.js
+*browser*.js
+playwright-report/
+test-results/
+AUTH-*.js
+FINAL-*.js
+ULTIMATE-*.js
+VICTORY-*.js
+SECURE-*.js
+PRODUCTION-*.js
+COMPLETE-*.js
+ABSOLUTE-*.js
+COMPREHENSIVE-*.js
+HEADED-*.js
+VISUAL-*.js
+DEMO-*.js
+DETAILED-*.js
+EMERGENCY-*.js
+CURRENT-*.js
+IMPROVED-*.js
+NEXTAUTH-*.js
+AUTO-*.js
+CACHE-*.js
+
+# Report files
+*REPORT*.md
+*DEBUG*.md
+*HANDOVER*.md
+*VISUAL*.md
+debug-*.json
+auth_response.json
+page_content.html
+manual-debug-report.md
+
+# Package backup
+package.json.old
+
+# Middleware backup
+middleware.ts.backup
+
+# TODO and temporary files
+todo.md
