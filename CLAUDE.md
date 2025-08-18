@@ -10,9 +10,14 @@ npm run dev                    # Start development server
 npm run build                  # Production build 
 npm run start                  # Production server
 npm run lint                   # ESLint checking
-npm run test                   # Unit tests
-npm run test:watch             # Test watch mode
-npm run test:coverage          # Coverage reports
+npm run test                   # Jest unit tests
+npm run test:watch             # Jest test watch mode
+npm run test:coverage          # Jest coverage reports
+
+# Playwright E2E Testing
+npx playwright test            # Run all Playwright tests
+npx playwright test --ui       # Run tests with UI mode
+npx playwright show-report     # View test results
 
 # Docker Development (Recommended)
 docker-compose up -d           # Start all services (app + PostgreSQL + pgAdmin)
@@ -89,8 +94,8 @@ sessions (id, user_id, session_token, expires, created_at)
 **Database Pattern**: Direct SQL queries using `database.query()` - no ORM for performance.
 
 **Seeded Data**: 
-- Admin: `admin@instaflow.com` / `admin123`
-- Test: `test@instaflow.com` / `test123`
+- Admin: `ktg.shota@gmail.com` / `ktg19850215`  
+- Test: `test@example.com` / `test123`
 
 ## API Route Structure
 
@@ -207,7 +212,10 @@ GOOGLE_CLIENT_SECRET=your-secret
 - Client state: React Context patterns
 - Authentication: AuthContext with localStorage persistence
 
-**Testing Strategy**: Jest + React Testing Library focused on API routes, components, and database queries.
+**Testing Strategy**: 
+- **Unit Tests**: Jest + React Testing Library for components and utilities
+- **E2E Tests**: Playwright with multi-browser support (Chrome, Firefox, Safari)
+- **Test Coverage**: Automated coverage reports with Jest
 
 **Security**: 
 - JWT tokens with 7-day expiry
@@ -249,7 +257,7 @@ curl http://localhost:3000/api/health/db
 # Authentication test
 curl -X POST http://localhost:3000/api/auth/signin \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@instaflow.com", "password": "test123"}'
+  -d '{"email": "test@example.com", "password": "test123"}'
 ```
 
 This architecture prioritizes type safety, development velocity, and maintainability while providing robust Instagram automation capabilities.
