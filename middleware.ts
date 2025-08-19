@@ -4,16 +4,6 @@ import { NextResponse } from 'next/server'
 export default auth((req) => {
   const { pathname } = req.nextUrl
   
-  // Skip middleware for API routes, static files, and Next.js internals
-  if (
-    pathname.startsWith('/api/') ||
-    pathname.startsWith('/_next/') ||
-    pathname.startsWith('/favicon') ||
-    pathname.includes('.')
-  ) {
-    return NextResponse.next()
-  }
-
   console.log('🚀 NextAuth v5 Middleware: Processing', pathname)
   console.log('🔍 Session:', req.auth ? 'Found' : 'Not found')
 
@@ -53,8 +43,17 @@ export default auth((req) => {
 
   console.log('✅ Request authorized')
   return NextResponse.next()
-}, {
-  callbacks: {
-    authorized: ({ auth }) => !!auth
-  }
 })
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+}

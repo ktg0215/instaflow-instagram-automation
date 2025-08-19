@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, ReactNode } from 'react'
 import { useSession, signIn as nextAuthSignIn, signOut as nextAuthSignOut } from 'next-auth/react'
-import { SessionProvider } from 'next-auth/react'
 
 interface User {
   id: string
@@ -30,8 +29,7 @@ export const useAuth = () => {
   return context;
 };
 
-// Internal AuthProvider that uses NextAuth hooks
-const InternalAuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const { data: session, status } = useSession()
   
   const user: User | null = session?.user ? {
@@ -44,7 +42,6 @@ const InternalAuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const loading = status === 'loading'
 
   const signIn = async (email: string, password: string) => {
-    
     try {
       const result = await nextAuthSignIn('credentials', {
         email,
@@ -71,8 +68,7 @@ const InternalAuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const signUp = async (email: string, password: string) => {
     try {
-      
-      // Use new register endpoint, then sign in
+      // Use register endpoint, then sign in
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
@@ -124,20 +120,5 @@ const InternalAuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }}>
       {children}
     </AuthContext.Provider>
-  );
-};
-
-// Main AuthProvider that wraps with SessionProvider
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  return (
-    <SessionProvider>
-      <InternalAuthProvider>
-        {children}
-      </InternalAuthProvider>
-    </SessionProvider>
   );
 };

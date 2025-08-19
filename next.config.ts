@@ -11,7 +11,21 @@ const nextConfig: NextConfig = {
       if (Array.isArray(config.externals)) {
         config.externals.push('pg-native');
       }
-    } else {
+    }
+    
+    // Global configuration - exclude problematic packages from both server and client
+    config.plugins = config.plugins || [];
+    
+    // Note: NextAuth v5 is compatible with Edge Runtime, allowing middleware usage
+    
+    // Exclude database packages
+    config.plugins.push(
+      new webpack.IgnorePlugin({
+        resourceRegExp: /^(pg|pg-connection-string|pg-native)$/,
+      })
+    );
+    
+    if (!isServer) {
       // Client-side configuration - completely exclude server modules
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -25,14 +39,6 @@ const nextConfig: NextConfig = {
         pg: false,
         'pg-native': false,
       };
-      
-      // More aggressive exclusion with multiple methods
-      config.plugins = config.plugins || [];
-      config.plugins.push(
-        new webpack.IgnorePlugin({
-          resourceRegExp: /^(pg|pg-connection-string|pg-native)$/,
-        })
-      );
       
       config.plugins.push(
         new webpack.IgnorePlugin({
