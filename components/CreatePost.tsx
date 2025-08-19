@@ -203,7 +203,7 @@ const CreatePost: React.FC = () => {
     }
   };
 
-  const handleChatSubmit = async (e: React.FormEvent) => {
+  const handleChatSubmit = async (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
@@ -705,7 +705,7 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
                     </div>
                     
                     {/* Chat Input */}
-                    <form onSubmit={handleChatSubmit} className="p-4 border-t border-purple-200">
+                    <div className="p-4 border-t border-purple-200">
                       <div className="flex space-x-2">
                         <input
                           type="text"
@@ -714,16 +714,23 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
                           placeholder="AIに質問してください..."
                           className="flex-1 px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                           disabled={isGeneratingText}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault();
+                              handleChatSubmit(e);
+                            }
+                          }}
                         />
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={handleChatSubmit}
                           disabled={!chatInput.trim() || isGeneratingText}
                           className="px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Send className="w-4 h-4" />
                         </button>
                       </div>
-                    </form>
+                    </div>
                   </>
                 )}
               </div>
