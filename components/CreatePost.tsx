@@ -93,7 +93,7 @@ const CreatePost: React.FC = () => {
     setCaption(e.target.value);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
     e.preventDefault();
     
     if (!caption.trim()) {
@@ -344,7 +344,7 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
         <div className="p-6">
           {/* タブコンテンツ */}
           {activeTab === 'create' && (
-            <form onSubmit={handleSubmit}>
+            <div>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Left Column - Media Upload */}
             <div className="space-y-6">
@@ -748,14 +748,15 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
                   {isCreating ? '処理中...' : '今すぐ公開'}
                 </button>
                 <button
-                  type="submit"
+                  type="button"
+                  onClick={(e) => handleSubmit(e)}
                   disabled={isCreating || !caption.trim()}
                   className="px-6 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isCreating ? '処理中...' : (scheduledAt ? '投稿を予約' : '下書き保存')}
                 </button>
               </div>
-            </form>
+            </div>
           )}
 
           {/* ハッシュタグ管理タブ */}
