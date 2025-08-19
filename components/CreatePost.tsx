@@ -1,19 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAI } from '../hooks/useAI';
 import { useAuth } from '../context/AuthContext';
 import { useInstagram } from '../hooks/useInstagram';
 import { usePosts } from '../hooks/usePosts';
 import { useHashtags } from '../hooks/useHashtags';
 import { useToast } from '../context/ToastContext';
-import HashtagManager from './HashtagManager';
-import ScheduleManager from './ScheduleManager';
-import { Upload, Image, Video, Calendar, Hash, Send, MessageCircle, Bot, User, Settings, Clock, X } from 'lucide-react';
+import { 
+  Upload, Image, Video, Calendar, Hash, Send, MessageCircle, Bot, User, Settings, Clock, X, 
+  Check, ChevronDown, ChevronRight, Smartphone, Monitor, Eye, Save, Zap, Sparkles, 
+  HelpCircle, Target, Palette, Tag, Plus, RefreshCw
+} from 'lucide-react';
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+}
+
+type PostPurpose = '認知向上' | '商品紹介' | 'エンゲージメント' | '告知' | '日常投稿';
+type PostTone = 'カジュアル' | 'フォーマル' | '親しみやすい' | 'プロフェッショナル' | 'ユーモラス';
+type CompletedStep = 'content' | 'visual' | 'settings' | 'preview';
+
+interface StepState {
+  completed: boolean;
+  collapsed: boolean;
 }
 
 const CreatePost: React.FC = () => {
@@ -23,39 +34,124 @@ const CreatePost: React.FC = () => {
   const { createPost, isCreating, createError } = usePosts();
   const { hashtags } = useHashtags();
   const { showToast } = useToast();
+  // Content State (STEP 1)
+  const [postPurpose, setPostPurpose] = useState<PostPurpose>('認知向上');
+  const [postTone, setPostTone] = useState<PostTone>('プロフェッショナル');
+  const [keywords, setKeywords] = useState('');
   const [caption, setCaption] = useState('');
-  const [mediaUrl, setMediaUrl] = useState('');
+
+  // Visual State (STEP 2)
+  const [mediaFiles, setMediaFiles] = useState<string[]>([]);
   const [mediaType, setMediaType] = useState<'image' | 'video' | 'carousel'>('image');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [tone, setTone] = useState('プロフェッショナル');
-  const [length, setLength] = useState('中程度（3-4文）');
 
-  // UI State
-  const [activeTab, setActiveTab] = useState<'create' | 'hashtags' | 'schedule'>('create');
+  // Settings State (STEP 3)
   const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
-  const [useHashtagsForAI, setUseHashtagsForAI] = useState(true);
+  const [hashtagSet, setHashtagSet] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [postTiming, setPostTiming] = useState<'now' | 'scheduled'>('now');
 
-  // AI Chat State
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'こんにちは！素晴らしいキャプションを一緒に作りましょう。投稿の内容やテーマについて教えてください。どんな雰囲気にしたいですか？',
-      timestamp: new Date()
+  // Preview State (STEP 4)
+  const [previewDevice, setPreviewDevice] = useState<'mobile' | 'desktop'>('mobile');
+
+  // Step Management
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [steps, setSteps] = useState<Record<number, StepState>>({
+    1: { completed: false, collapsed: false },
+    2: { completed: false, collapsed: true },
+    3: { completed: false, collapsed: true },
+    4: { completed: false, collapsed: true }
+  });
+
+  // Auto-save
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+
+  // Helper functions for step management
+  const toggleStep = (stepNumber: number) => {
+    setSteps(prev => ({
+      ...prev,
+      [stepNumber]: {
+        ...prev[stepNumber],
+        collapsed: !prev[stepNumber].collapsed
+      }
+    }));
+  };
+
+  const completeStep = (stepNumber: number) => {
+    setSteps(prev => ({
+      ...prev,
+      [stepNumber]: { completed: true, collapsed: true },
+      [stepNumber + 1]: stepNumber < 4 ? { ...prev[stepNumber + 1], collapsed: false } : prev[stepNumber + 1]
+    }));
+    
+    if (stepNumber < 4) {
+      setCurrentStep((stepNumber + 1) as 1 | 2 | 3 | 4);
     }
-  ]);
-  const [chatInput, setChatInput] = useState('');
-  const [isChatExpanded, setIsChatExpanded] = useState(false);
+  };
 
+  const isStepValid = (stepNumber: number): boolean => {
+    switch (stepNumber) {
+      case 1: return caption.trim().length > 0;
+      case 2: return mediaFiles.length > 0 || true; // メディアはオプション
+      case 3: return true; // 設定はオプション
+      case 4: return true; // プレビューは常に有効
+      default: return false;
+    }
+  };
+
+  // AI Caption Generation
+  const handleGenerateCaption = async () => {
+    const prompt = `
+投稿目的: ${postPurpose}
+トーン: ${postTone}
+キーワード: ${keywords}
+${selectedHashtags.length > 0 ? `\nハッシュタグ: ${selectedHashtags.map(tag => `#${tag}`).join(' ')}` : ''}
+
+上記の条件に基づいて、Instagram投稿用のキャプションを日本語で生成してください。
+文字数は2200文字以内で、読みやすく魅力的な内容にしてください。
+`;
+
+    try {
+      await generateText({ 
+        prompt, 
+        options: { 
+          tone: postTone === 'ユーモラス' ? '面白い' : postTone, 
+          length: '中程度（3-4文）' 
+        } 
+      });
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: 'AI生成エラー',
+        message: 'キャプション生成に失敗しました'
+      });
+    }
+  };
+
+  // Emoji Suggest
+  const suggestEmojis = async () => {
+    const emojiMap: Record<PostPurpose, string[]> = {
+      '認知向上': ['✨', '💫', '🌟', '🚀', '💯', '👑', '🔥', '💎'],
+      '商品紹介': ['🛍️', '💝', '🎁', '⭐', '💯', '🔥', '✨', '👌'],
+      'エンゲージメント': ['❤️', '💕', '🥰', '😍', '👏', '🙌', '🤗', '💖'],
+      '告知': ['📢', '🔔', '🎉', '🚀', '💫', '✨', '⚡', '🌟'],
+      '日常投稿': ['☀️', '🌈', '💕', '😊', '🌺', '🍃', '🌸', '💫']
+    };
+    
+    return emojiMap[postPurpose] || ['✨', '💫', '🌟'];
+  };
+
+  // File Upload Handler (updated for multiple files)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // ファイルサイズチェック (10MB制限)
+    const files = Array.from(e.target.files || []);
+    
+    files.forEach(file => {
+      // ファイルサイズチェック
       if (file.size > 10 * 1024 * 1024) {
         showToast({
           type: 'error',
           title: 'ファイルサイズエラー',
-          message: 'ファイルサイズは10MB以下にしてください'
+          message: `${file.name}: 10MB以下にしてください`
         });
         return;
       }
@@ -66,28 +162,65 @@ const CreatePost: React.FC = () => {
         showToast({
           type: 'error',
           title: 'ファイルタイプエラー',
-          message: 'JPG、PNG、GIF、MP4、MOVファイルのみアップロード可能です'
+          message: `${file.name}: 対応していない形式です`
         });
         return;
       }
 
-      // ファイルを読み込んでプレビューを表示
       const reader = new FileReader();
       reader.onload = (event) => {
         if (event.target?.result) {
-          setMediaUrl(event.target.result as string);
+          setMediaFiles(prev => [...prev, event.target.result as string]);
           setMediaType(file.type.startsWith('video/') ? 'video' : 'image');
         }
       };
       reader.readAsDataURL(file);
+    });
 
+    if (files.length > 0) {
       showToast({
         type: 'success',
         title: 'アップロード完了',
-        message: `${file.name} をアップロードしました`
+        message: `${files.length}個のファイルをアップロードしました`
       });
     }
   };
+
+  // Auto-save functionality
+  useEffect(() => {
+    if (!autoSaveEnabled) return;
+
+    const autoSave = setInterval(() => {
+      const draftData = {
+        postPurpose,
+        postTone,
+        keywords,
+        caption,
+        mediaFiles,
+        selectedHashtags,
+        scheduledAt,
+        postTiming
+      };
+
+      // Save to localStorage
+      localStorage.setItem('createPost_draft', JSON.stringify(draftData));
+      setLastSaved(new Date());
+    }, 30000); // 30秒ごとに自動保存
+
+    return () => clearInterval(autoSave);
+  }, [postPurpose, postTone, keywords, caption, mediaFiles, selectedHashtags, scheduledAt, postTiming, autoSaveEnabled]);
+
+  // AI生成結果をキャプションに設定
+  useEffect(() => {
+    if (generatedContent) {
+      setCaption(generatedContent);
+      setGeneratedContent(null);
+      // STEP 1完了をチェック
+      if (generatedContent.trim().length > 0) {
+        completeStep(1);
+      }
+    }
+  }, [generatedContent, setGeneratedContent]);
 
   const handleCaptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCaption(e.target.value);
@@ -296,52 +429,239 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
     'https://images.pexels.com/photos/1526814/pexels-photo-1526814.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
   ];
 
+  const handlePublishPost = async (isDraft: boolean = false) => {
+    if (!caption.trim()) {
+      showToast({
+        type: 'warning',
+        title: '入力エラー',
+        message: 'キャプションを入力してください'
+      });
+      return;
+    }
+
+    const finalCaption = selectedHashtags.length > 0 
+      ? `${caption.trim()}\n\n${selectedHashtags.map(tag => `#${tag}`).join(' ')}`
+      : caption.trim();
+    
+    const postData = {
+      caption: finalCaption,
+      image_url: mediaFiles[0] || null,
+      scheduled_at: postTiming === 'scheduled' ? scheduledAt : null,
+      status: isDraft ? 'draft' as const : postTiming === 'scheduled' ? 'scheduled' as const : 'published' as const,
+    };
+
+    try {
+      createPost(postData);
+      
+      showToast({
+        type: 'success',
+        title: isDraft ? '下書き保存完了' : postTiming === 'scheduled' ? '投稿予約完了' : '投稿公開完了',
+        message: isDraft ? '下書きとして保存されました' : postTiming === 'scheduled' ? '指定時刻に投稿されます' : '投稿が公開されました'
+      });
+
+      // Reset form after successful post
+      setCaption('');
+      setMediaFiles([]);
+      setSelectedHashtags([]);
+      setScheduledAt('');
+      setKeywords('');
+      
+      // Reset steps
+      setSteps({
+        1: { completed: false, collapsed: false },
+        2: { completed: false, collapsed: true },
+        3: { completed: false, collapsed: true },
+        4: { completed: false, collapsed: true }
+      });
+      setCurrentStep(1);
+      
+    } catch (error) {
+      showToast({
+        type: 'error',
+        title: '投稿失敗',
+        message: error instanceof Error ? error.message : '投稿の作成に失敗しました'
+      });
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="bg-white/90 backdrop-blur-sm rounded-xl shadow-lg border border-slate-300">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">投稿作成スタジオ</h2>
-          <p className="text-gray-500 mt-1">AI支援、ハッシュタグ管理、予約投稿機能を活用しましょう</p>
-          
-          {/* タブナビゲーション */}
-          <div className="flex space-x-1 mt-4 p-1 bg-gray-100 rounded-lg w-fit">
-            <button
-              onClick={() => setActiveTab('create')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                activeTab === 'create'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <MessageCircle className="w-4 h-4 inline-block mr-2" />
-              投稿作成
-            </button>
-            <button
-              onClick={() => setActiveTab('hashtags')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                activeTab === 'hashtags'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Hash className="w-4 h-4 inline-block mr-2" />
-              ハッシュタグ管理
-            </button>
-            <button
-              onClick={() => setActiveTab('schedule')}
-              className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-                activeTab === 'schedule'
-                  ? 'bg-white text-blue-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Clock className="w-4 h-4 inline-block mr-2" />
-              予約管理
-            </button>
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="bg-white rounded-xl shadow-lg border p-6">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            投稿作成スタジオ
+          </h1>
+          {lastSaved && (
+            <div className="flex items-center text-sm text-gray-500">
+              <Save className="w-4 h-4 mr-1" />
+              最後に保存: {lastSaved.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
+        <p className="text-gray-600">AIを活用したInstagram投稿作成ワークフロー</p>
+      </div>
+
+      {/* STEP 1: Content Creation */}
+      <div className={`bg-white rounded-xl shadow-lg border transition-all ${currentStep === 1 ? 'ring-2 ring-blue-500' : ''}`}>
+        <div 
+          className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50"
+          onClick={() => toggleStep(1)}
+        >
+          <div className="flex items-center space-x-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              steps[1].completed ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
+              {steps[1].completed ? <Check className="w-5 h-5" /> : '1'}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">コンテンツ作成</h2>
+              <p className="text-sm text-gray-600">投稿の目的とキャプションを設定</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HelpCircle className="w-4 h-4 text-gray-400" />
+            {steps[1].collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
         </div>
         
-        <div className="p-6">
+        {!steps[1].collapsed && (
+          <div className="px-6 pb-6 border-t bg-gray-50/50">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+              {/* Left Column */}
+              <div className="space-y-4">
+                {/* Post Purpose */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Target className="w-4 h-4 inline mr-1" />
+                    投稿の目的
+                  </label>
+                  <select
+                    value={postPurpose}
+                    onChange={(e) => setPostPurpose(e.target.value as PostPurpose)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="認知向上">ブランド認知向上</option>
+                    <option value="商品紹介">商品・サービス紹介</option>
+                    <option value="エンゲージメント">エンゲージメント向上</option>
+                    <option value="告知">告知・お知らせ</option>
+                    <option value="日常投稿">日常投稿</option>
+                  </select>
+                </div>
+
+                {/* Post Tone */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <Palette className="w-4 h-4 inline mr-1" />
+                    トーン
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['カジュアル', 'フォーマル', '親しみやすい', 'プロフェッショナル', 'ユーモラス'] as PostTone[]).map((tone) => (
+                      <label key={tone} className="flex items-center">
+                        <input
+                          type="radio"
+                          name="tone"
+                          value={tone}
+                          checked={postTone === tone}
+                          onChange={(e) => setPostTone(e.target.value as PostTone)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">{tone}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Keywords */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    キーワード
+                  </label>
+                  <input
+                    type="text"
+                    value={keywords}
+                    onChange={(e) => setKeywords(e.target.value)}
+                    placeholder="含めたいキーワードをスペース区切りで入力"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              {/* Right Column */}
+              <div className="space-y-4">
+                {/* AI Generation */}
+                <div className="bg-gradient-to-br from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Bot className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-medium text-purple-900">AIキャプション生成</h3>
+                  </div>
+                  <button
+                    onClick={handleGenerateCaption}
+                    disabled={isGeneratingText}
+                    className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg disabled:opacity-50"
+                  >
+                    {isGeneratingText ? (
+                      <>
+                        <RefreshCw className="w-4 h-4 inline mr-2 animate-spin" />
+                        生成中...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-4 h-4 inline mr-2" />
+                        AIでキャプション生成
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Emoji Suggest */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    絵文字サジェスト
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestEmojis().then ? null : suggestEmojis().map((emoji, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCaption(prev => prev + emoji)}
+                        className="w-8 h-8 bg-gray-100 hover:bg-gray-200 rounded-md text-lg transition-colors"
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Caption Input */}
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                キャプション
+              </label>
+              <textarea
+                value={caption}
+                onChange={handleCaptionChange}
+                placeholder="キャプションを入力してください..."
+                className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                maxLength={2200}
+              />
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-sm text-gray-500">
+                  {caption.length}/2200 文字
+                </span>
+                <button
+                  onClick={() => isStepValid(1) && completeStep(1)}
+                  disabled={!isStepValid(1)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  次のステップへ
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
           {/* タブコンテンツ */}
           {activeTab === 'create' && (
             <div>
