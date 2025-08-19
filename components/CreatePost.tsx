@@ -5,22 +5,15 @@ import { useInstagram } from '../hooks/useInstagram';
 import { usePosts } from '../hooks/usePosts';
 import { useHashtags } from '../hooks/useHashtags';
 import { useToast } from '../context/ToastContext';
+import HashtagManager from './HashtagManager';
 import { 
   Upload, Image, Video, Calendar, Hash, Send, MessageCircle, Bot, User, Settings, Clock, X, 
   Check, ChevronDown, ChevronRight, Smartphone, Monitor, Eye, Save, Zap, Sparkles, 
-  HelpCircle, Target, Palette, Tag, Plus, RefreshCw
+  HelpCircle, Target, Palette, Tag, Plus, RefreshCw, Trash2
 } from 'lucide-react';
-
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
-}
 
 type PostPurpose = '認知向上' | '商品紹介' | 'エンゲージメント' | '告知' | '日常投稿';
 type PostTone = 'カジュアル' | 'フォーマル' | '親しみやすい' | 'プロフェッショナル' | 'ユーモラス';
-type CompletedStep = 'content' | 'visual' | 'settings' | 'preview';
 
 interface StepState {
   completed: boolean;
@@ -29,11 +22,11 @@ interface StepState {
 
 const CreatePost: React.FC = () => {
   const { user } = useAuth();
-  const { isConnected: instagramConnected, publishToInstagram } = useInstagram(user?.id ? String(user.id) : undefined);
   const { generateText, isGeneratingText, generatedContent, setGeneratedContent } = useAI(user?.id ? String(user.id) : undefined);
   const { createPost, isCreating, createError } = usePosts();
   const { hashtags } = useHashtags();
   const { showToast } = useToast();
+
   // Content State (STEP 1)
   const [postPurpose, setPostPurpose] = useState<PostPurpose>('認知向上');
   const [postTone, setPostTone] = useState<PostTone>('プロフェッショナル');
@@ -92,7 +85,7 @@ const CreatePost: React.FC = () => {
   const isStepValid = (stepNumber: number): boolean => {
     switch (stepNumber) {
       case 1: return caption.trim().length > 0;
-      case 2: return mediaFiles.length > 0 || true; // メディアはオプション
+      case 2: return true; // メディアはオプション
       case 3: return true; // 設定はオプション
       case 4: return true; // プレビューは常に有効
       default: return false;
@@ -129,7 +122,7 @@ ${selectedHashtags.length > 0 ? `\nハッシュタグ: ${selectedHashtags.map(ta
   };
 
   // Emoji Suggest
-  const suggestEmojis = async () => {
+  const suggestEmojis = () => {
     const emojiMap: Record<PostPurpose, string[]> = {
       '認知向上': ['✨', '💫', '🌟', '🚀', '💯', '👑', '🔥', '💎'],
       '商品紹介': ['🛍️', '💝', '🎁', '⭐', '💯', '🔥', '✨', '👌'],
@@ -141,7 +134,7 @@ ${selectedHashtags.length > 0 ? `\nハッシュタグ: ${selectedHashtags.map(ta
     return emojiMap[postPurpose] || ['✨', '💫', '🌟'];
   };
 
-  // File Upload Handler (updated for multiple files)
+  // File Upload Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     
@@ -172,6 +165,9 @@ ${selectedHashtags.length > 0 ? `\nハッシュタグ: ${selectedHashtags.map(ta
         if (event.target?.result) {
           setMediaFiles(prev => [...prev, event.target.result as string]);
           setMediaType(file.type.startsWith('video/') ? 'video' : 'image');
+          if (mediaFiles.length === 0) {
+            completeStep(2);
+          }
         }
       };
       reader.readAsDataURL(file);
@@ -221,213 +217,6 @@ ${selectedHashtags.length > 0 ? `\nハッシュタグ: ${selectedHashtags.map(ta
       }
     }
   }, [generatedContent, setGeneratedContent]);
-
-  const handleCaptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setCaption(e.target.value);
-  };
-
-  const handleSubmit = async (e: React.FormEvent | React.MouseEvent) => {
-    e.preventDefault();
-    
-    if (!caption.trim()) {
-      showToast({
-        type: 'warning',
-        title: '入力エラー',
-        message: 'キャプションを入力してください'
-      });
-      return;
-    }
-    
-    // 選択されたハッシュタグを含む最終キャプション
-    const finalCaption = selectedHashtags.length > 0 
-      ? `${caption.trim()}\n\n${selectedHashtags.map(tag => `#${tag}`).join(' ')}`
-      : caption.trim();
-    
-    const postData = {
-      caption: finalCaption,
-      image_url: mediaUrl || null,
-      scheduled_at: scheduledAt || null,
-      status: scheduledAt ? 'scheduled' as const : 'draft' as const,
-    };
-
-    try {
-      createPost(postData);
-      
-      // Reset form
-      setCaption('');
-      setMediaUrl('');
-      setScheduledAt('');
-      setSelectedHashtags([]);
-      
-      showToast({
-        type: 'success',
-        title: '投稿作成完了',
-        message: scheduledAt ? '投稿が予約されました' : '投稿が下書きとして保存されました'
-      });
-    } catch (error) {
-      console.error('投稿作成エラー:', error);
-      showToast({
-        type: 'error',
-        title: '投稿作成失敗',
-        message: error instanceof Error ? error.message : '投稿の作成に失敗しました'
-      });
-    }
-  };
-
-  const handlePublishNow = async () => {
-    if (!caption.trim()) {
-      showToast({
-        type: 'warning',
-        title: '入力エラー',
-        message: 'キャプションを入力してください'
-      });
-      return;
-    }
-
-    if (!instagramConnected) {
-      showToast({
-        type: 'info',
-        title: 'Instagram未接続',
-        message: '設定ページでInstagramアカウントを接続してください'
-      });
-      return;
-    }
-
-    try {
-      // 選択されたハッシュタグを含む最終キャプション
-      const finalCaption = selectedHashtags.length > 0 
-        ? `${caption.trim()}\n\n${selectedHashtags.map(tag => `#${tag}`).join(' ')}`
-        : caption.trim();
-
-      // データベースに保存（今すぐ公開として）
-      const postData = {
-        caption: finalCaption,
-        image_url: mediaUrl || null,
-        status: 'published' as const,
-      };
-
-      createPost(postData);
-
-      // Instagram API連携は Phase 7 で実装予定
-      // const instagramPostId = await publishToInstagram({
-      //   mediaUrl,
-      //   caption: finalCaption,
-      //   mediaType: mediaType === 'video' ? 'video' : 'image'
-      // });
-      
-      // Reset form
-      setCaption('');
-      setMediaUrl('');
-      setScheduledAt('');
-      setSelectedHashtags([]);
-      
-      showToast({
-        type: 'success',
-        title: '投稿公開完了',
-        message: 'Instagram連携はPhase 7で実装予定です'
-      });
-    } catch (error) {
-      console.error('Publish error:', error);
-      showToast({
-        type: 'error',
-        title: '投稿公開失敗',
-        message: error instanceof Error ? error.message : '投稿の公開に失敗しました'
-      });
-    }
-  };
-
-  const handleChatSubmit = async (e: React.FormEvent | React.MouseEvent) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-
-    const userMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: chatInput,
-      timestamp: new Date()
-    };
-
-    setChatMessages(prev => [...prev, userMessage]);
-    const currentInput = chatInput;
-    setChatInput('');
-
-    // Generate AI response
-    const selectedHashtagsInfo = useHashtagsForAI && selectedHashtags.length > 0 
-      ? `\n\n選択されたハッシュタグ: ${selectedHashtags.map(tag => `#${tag}`).join(' ')}\n（これらのハッシュタグを考慮してキャプションを作成してください）`
-      : '';
-
-    const contextPrompt = `
-ユーザーからの質問: ${currentInput}
-
-これまでの会話:
-${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'AI'}: ${msg.content}`).join('\n')}${selectedHashtagsInfo}
-
-あなたはInstagramキャプション作成の専門家です。ユーザーの質問に対して、以下の点を考慮して回答してください：
-- キャプション作成のアドバイス
-- ハッシュタグの提案
-- エンゲージメントを高める方法
-- トーンや雰囲気の調整
-- 具体的なキャプション例の提供
-
-親しみやすく、実用的なアドバイスを日本語で提供してください。キャプション例を提供する場合は「例：」で始めてください。
-`;
-
-    try {
-      generateText({ prompt: contextPrompt, options: { tone: 'フレンドリー', length: '中程度（3-4文）' } });
-    } catch (error) {
-      const errorMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: 'すみません、一時的にエラーが発生しました。もう一度お試しください。',
-        timestamp: new Date()
-      };
-      setChatMessages(prev => [...prev, errorMessage]);
-    }
-  };
-
-  // AI生成結果をチャットに追加
-  React.useEffect(() => {
-    if (generatedContent) {
-      const aiMessage: ChatMessage = {
-        id: Date.now().toString(),
-        role: 'assistant',
-        content: generatedContent,
-        timestamp: new Date()
-      };
-      setChatMessages(prev => [...prev, aiMessage]);
-      setGeneratedContent(null);
-    }
-  }, [generatedContent, setGeneratedContent]);
-
-  const setCaptionFromChat = (content: string) => {
-    // Extract caption from AI response
-    const lines = content.split('\n');
-    const captionLine = lines.find(line => 
-      line.includes('例：') || 
-      line.includes('「') && line.includes('」') ||
-      line.includes('キャプション')
-    );
-    
-    if (captionLine) {
-      // Extract text between quotes or after "例："
-      const match = captionLine.match(/例：(.+)/) || 
-                   captionLine.match(/[「『]([^」』]+)[」』]/) ||
-                   [null, captionLine.replace(/^.*?キャプション[：:]\s*/, '')];
-      if (match && match[1]) {
-        setCaption(match[1].trim());
-      }
-    } else {
-      // Use the whole content if no specific caption format found
-      setCaption(content);
-    }
-  };
-
-  const sampleImages = [
-    'https://images.pexels.com/photos/1631677/pexels-photo-1631677.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-    'https://images.pexels.com/photos/1526814/pexels-photo-1526814.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
-  ];
 
   const handlePublishPost = async (isDraft: boolean = false) => {
     if (!caption.trim()) {
@@ -484,6 +273,13 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
     }
   };
 
+  const sampleImages = [
+    'https://images.pexels.com/photos/1631677/pexels-photo-1631677.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1',
+    'https://images.pexels.com/photos/3184465/pexels-photo-3184465.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1',
+    'https://images.pexels.com/photos/1366919/pexels-photo-1366919.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1',
+    'https://images.pexels.com/photos/1526814/pexels-photo-1526814.jpeg?auto=compress&cs=tinysrgb&w=400&h=400&dpr=1',
+  ];
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       {/* Header */}
@@ -520,7 +316,7 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
             </div>
           </div>
           <div className="flex items-center space-x-2">
-            <HelpCircle className="w-4 h-4 text-gray-400" />
+            <HelpCircle className="w-4 h-4 text-gray-400" title="投稿の目的とトーンを選択して、AIでキャプションを生成できます" />
             {steps[1].collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
           </div>
         </div>
@@ -620,7 +416,7 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
                     絵文字サジェスト
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {suggestEmojis().then ? null : suggestEmojis().map((emoji, index) => (
+                    {suggestEmojis().map((emoji, index) => (
                       <button
                         key={index}
                         onClick={() => setCaption(prev => prev + emoji)}
@@ -641,7 +437,7 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
               </label>
               <textarea
                 value={caption}
-                onChange={handleCaptionChange}
+                onChange={(e) => setCaption(e.target.value)}
                 placeholder="キャプションを入力してください..."
                 className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
                 maxLength={2200}
@@ -662,82 +458,96 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
           </div>
         )}
       </div>
-          {/* タブコンテンツ */}
-          {activeTab === 'create' && (
+
+      {/* STEP 2: Visual Settings */}
+      <div className={`bg-white rounded-xl shadow-lg border transition-all ${currentStep === 2 ? 'ring-2 ring-blue-500' : ''}`}>
+        <div 
+          className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50"
+          onClick={() => toggleStep(2)}
+        >
+          <div className="flex items-center space-x-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              steps[2].completed ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
+              {steps[2].completed ? <Check className="w-5 h-5" /> : '2'}
+            </div>
             <div>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column - Media Upload */}
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  メディアコンテンツ
-                </label>
-                <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-blue-50/50">
-                  {mediaUrl ? (
-                    <div className="space-y-4">
-                      <img 
-                        src={mediaUrl} 
-                        alt="アップロードプレビュー" 
-                        className="w-full h-64 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setMediaUrl('')}
-                        className="text-sm text-gray-500 hover:text-red-500"
-                      >
-                        削除
-                      </button>
+              <h2 className="text-lg font-semibold text-gray-900">ビジュアル設定</h2>
+              <p className="text-sm text-gray-600">画像・動画のアップロードと選択</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HelpCircle className="w-4 h-4 text-gray-400" title="画像や動画をアップロードまたは選択してください" />
+            {steps[2].collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
+        </div>
+        
+        {!steps[2].collapsed && (
+          <div className="px-6 pb-6 border-t bg-gray-50/50">
+            <div className="mt-6 space-y-6">
+              {/* Upload Area */}
+              <div className="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-500 transition-colors bg-blue-50/50">
+                {mediaFiles.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-3 gap-4">
+                      {mediaFiles.map((url, index) => (
+                        <div key={index} className="relative">
+                          <img 
+                            src={url} 
+                            alt={`アップロード ${index + 1}`}
+                            className="w-full h-32 object-cover rounded-lg"
+                          />
+                          <button
+                            onClick={() => setMediaFiles(prev => prev.filter((_, i) => i !== index))}
+                            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <Upload className="w-12 h-12 text-gray-400 mx-auto" />
-                      <div>
-                        <p className="text-gray-600">メディアをアップロード</p>
-                        <p className="text-sm text-gray-500">JPG、PNG、MP4（最大10MB）</p>
-                      </div>
-                      
-                      {/* File Upload Input */}
-                      <div className="space-y-3">
-                        <input
-                          type="file"
-                          id="media-upload"
-                          accept="image/*,video/*"
-                          onChange={handleFileUpload}
-                          className="hidden"
-                        />
-                        <label
-                          htmlFor="media-upload"
-                          className="block w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer text-center transition-colors"
-                        >
-                          ファイルを選択
-                        </label>
-                        
-                        <div className="text-center text-gray-400">または</div>
-                        
-                        <input
-                          type="url"
-                          placeholder="画像URLを貼り付け"
-                          value={mediaUrl}
-                          onChange={(e) => setMediaUrl(e.target.value)}
-                          className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white/80"
-                        />
-                      </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <Upload className="w-12 h-12 text-gray-400 mx-auto" />
+                    <div>
+                      <p className="text-gray-600">メディアをアップロード</p>
+                      <p className="text-sm text-gray-500">JPG、PNG、MP4（最大10MB）</p>
                     </div>
-                  )}
+                  </div>
+                )}
+                
+                <div className="mt-4">
+                  <input
+                    type="file"
+                    id="media-upload"
+                    accept="image/*,video/*"
+                    multiple
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <label
+                    htmlFor="media-upload"
+                    className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors"
+                  >
+                    ファイルを選択
+                  </label>
                 </div>
               </div>
 
               {/* Sample Images */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
                   クイック選択
                 </label>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {sampleImages.map((url, index) => (
                     <button
                       key={index}
-                      type="button"
-                      onClick={() => setMediaUrl(url)}
+                      onClick={() => {
+                        setMediaFiles(prev => [...prev, url]);
+                        if (mediaFiles.length === 0) completeStep(2);
+                      }}
                       className="aspect-square rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition-all"
                     >
                       <img src={url} alt={`Sample ${index + 1}`} className="w-full h-full object-cover" />
@@ -746,353 +556,236 @@ ${chatMessages.slice(-3).map(msg => `${msg.role === 'user' ? 'ユーザー' : 'A
                 </div>
               </div>
 
-              {/* Media Type Selection */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  投稿タイプ
-                </label>
-                <div className="flex space-x-4">
-                  {[
-                    { value: 'image', label: '写真', icon: Image },
-                    { value: 'video', label: '動画', icon: Video },
-                    { value: 'carousel', label: 'カルーセル', icon: Hash },
-                  ].map((type) => {
-                    const Icon = type.icon;
-                    return (
-                      <button
-                        key={type.value}
-                        type="button"
-                        onClick={() => setMediaType(type.value as 'image' | 'video' | 'carousel')}
-                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg border transition-colors ${
-                          mediaType === type.value
-                            ? 'bg-blue-100 border-blue-600 text-blue-800'
-                            : 'bg-white border-blue-300 text-blue-700 hover:bg-blue-50'
-                        }`}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span className="text-sm font-medium">{type.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Middle Column - Caption & AI Chat */}
-            <div className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    キャプション
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsChatExpanded(!isChatExpanded)}
-                    className="flex items-center space-x-1 px-3 py-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span className="text-sm">
-                      {isChatExpanded ? 'チャットを閉じる' : 'AIチャット'}
-                    </span>
-                  </button>
-                </div>
-                <textarea
-                  value={caption}
-                  onChange={handleCaptionChange}
-                  placeholder="キャプションを入力してください... ハッシュタグを使ってより多くの人にリーチしましょう！"
-                  className="w-full h-32 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent resize-none bg-white/90"
-                  maxLength={2200}
-                />
-                <div className="flex justify-between items-center mt-2">
-                  <span className="text-sm text-gray-500">
-                    {caption.length}/2200 文字
-                  </span>
-                  <span className="text-sm text-gray-500">
-                    {(caption.match(/#\w+/g) || []).length} ハッシュタグ
-                  </span>
-                </div>
-              </div>
-
-              {/* AI Generation Settings */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">AI生成設定</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">トーン</label>
-                    <select 
-                      value={tone}
-                      onChange={(e) => setTone(e.target.value)}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option>プロフェッショナル</option>
-                      <option>カジュアル</option>
-                      <option>インスピレーショナル</option>
-                      <option>面白い</option>
-                      <option>教育的</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">長さ</label>
-                    <select 
-                      value={length}
-                      onChange={(e) => setLength(e.target.value)}
-                      className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-purple-500 focus:border-transparent"
-                    >
-                      <option>短い（1-2文）</option>
-                      <option>中程度（3-4文）</option>
-                      <option>長い（5文以上）</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="useHashtagsForAI"
-                    checked={useHashtagsForAI}
-                    onChange={(e) => setUseHashtagsForAI(e.target.checked)}
-                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                  />
-                  <label htmlFor="useHashtagsForAI" className="text-xs text-gray-600">
-                    選択したハッシュタグをAI生成に活用
-                  </label>
-                </div>
-              </div>
-
-              {/* Selected Hashtags Display */}
-              {selectedHashtags.length > 0 && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="text-sm font-medium text-blue-900 mb-2">
-                    選択中のハッシュタグ ({selectedHashtags.length})
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedHashtags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-sm rounded-full"
-                      >
-                        <span>#{tag}</span>
-                        <button
-                          onClick={() => setSelectedHashtags(prev => prev.filter(t => t !== tag))}
-                          className="hover:bg-blue-700 rounded-full p-0.5"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setActiveTab('hashtags')}
-                    className="mt-3 text-xs text-blue-600 hover:text-blue-800 underline"
-                  >
-                    ハッシュタグを管理
-                  </button>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  投稿予約（オプション）
-                </label>
-                <div className="flex items-center space-x-2">
-                  <Calendar className="w-5 h-5 text-gray-400" />
-                  <input
-                    type="datetime-local"
-                    value={scheduledAt}
-                    onChange={(e) => setScheduledAt(e.target.value)}
-                    min={new Date().toISOString().slice(0, 16)}
-                    className="flex-1 px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent bg-white/90"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  空欄にすると下書きとして保存されます
-                </p>
-              </div>
-            </div>
-
-            {/* Right Column - Instagram Preview & AI Chat */}
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Instagramプレビュー
-                </label>
-                <div className="bg-black rounded-lg p-4 max-w-sm mx-auto">
-                  <div className="bg-white rounded-lg overflow-hidden">
-                    {/* Header */}
-                    <div className="flex items-center p-3 border-b">
-                      <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full"></div>
-                      <div className="ml-3">
-                        <p className="text-sm font-semibold">your_username</p>
-                      </div>
-                    </div>
-                    
-                    {/* Media */}
-                    {mediaUrl && (
-                      <div className="aspect-square bg-gray-100">
-                        <img 
-                          src={mediaUrl} 
-                          alt="Preview" 
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    )}
-                    
-                    {/* Caption */}
-                    <div className="p-3">
-                      <p className="text-sm">
-                        <span className="font-semibold">your_username</span>{' '}
-                        {caption || 'キャプションがここに表示されます...'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* AI Chat Section */}
-              <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                <div className="p-4 border-b border-purple-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <Bot className="w-5 h-5 text-purple-600" />
-                      <h3 className="text-sm font-medium text-purple-800">AIキャプションアシスタント</h3>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setIsChatExpanded(!isChatExpanded)}
-                      className="text-purple-600 hover:text-purple-800 transition-colors"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {!isChatExpanded && (
-                    <div className="mt-2 space-y-1 text-xs text-purple-700">
-                      <p>• 「カフェの写真にぴったりなキャプションを作って」</p>
-                      <p>• 「もっとカジュアルなトーンにして」</p>
-                      <p>• 「ハッシュタグを追加して」</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Chat Messages - Only show when expanded */}
-                {isChatExpanded && (
-                  <>
-                    <div className="max-h-64 overflow-y-auto p-4 space-y-3">
-                      {chatMessages.map((message) => (
-                        <div
-                          key={message.id}
-                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div
-                            className={`max-w-[85%] p-3 rounded-lg text-sm ${
-                              message.role === 'user'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-white border border-purple-200 text-gray-800'
-                            }`}
-                          >
-                            <div className="flex items-start space-x-2">
-                              {message.role === 'assistant' && <Bot className="w-4 h-4 mt-0.5 text-purple-600" />}
-                              {message.role === 'user' && <User className="w-4 h-4 mt-0.5" />}
-                              <div className="flex-1">
-                                <p className="leading-relaxed">{message.content}</p>
-                                {message.role === 'assistant' && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setCaptionFromChat(message.content)}
-                                    className="mt-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full hover:bg-purple-200 transition-colors font-medium"
-                                  >
-                                    ✨ キャプションに使用
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                      {isGeneratingText && (
-                        <div className="flex justify-start">
-                          <div className="bg-white border border-purple-200 text-gray-800 p-3 rounded-lg">
-                            <div className="flex items-center space-x-2">
-                              <Bot className="w-4 h-4 text-purple-600" />
-                              <div className="flex space-x-1">
-                                <div className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce"></div>
-                                <div className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                                <div className="w-1.5 h-1.5 bg-purple-600 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                              </div>
-                              <span className="text-xs text-purple-600">考え中...</span>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    
-                    {/* Chat Input */}
-                    <div className="p-4 border-t border-purple-200">
-                      <div className="flex space-x-2">
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="AIに質問してください..."
-                          className="flex-1 px-3 py-2 text-sm border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                          disabled={isGeneratingText}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !e.shiftKey) {
-                              e.preventDefault();
-                              handleChatSubmit(e);
-                            }
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleChatSubmit}
-                          disabled={!chatInput.trim() || isGeneratingText}
-                          className="px-3 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <Send className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => completeStep(2)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  次のステップへ
+                </button>
               </div>
             </div>
           </div>
+        )}
+      </div>
 
-              {/* Submit Buttons */}
-              <div className="flex justify-end space-x-4 mt-8 pt-6 border-t">
+      {/* STEP 3: Post Settings */}
+      <div className={`bg-white rounded-xl shadow-lg border transition-all ${currentStep === 3 ? 'ring-2 ring-blue-500' : ''}`}>
+        <div 
+          className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50"
+          onClick={() => toggleStep(3)}
+        >
+          <div className="flex items-center space-x-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              steps[3].completed ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
+              {steps[3].completed ? <Check className="w-5 h-5" /> : '3'}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">投稿設定</h2>
+              <p className="text-sm text-gray-600">ハッシュタグと投稿日時を設定</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HelpCircle className="w-4 h-4 text-gray-400" title="ハッシュタグの選択と投稿タイミングを設定してください" />
+            {steps[3].collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
+        </div>
+        
+        {!steps[3].collapsed && (
+          <div className="px-6 pb-6 border-t bg-gray-50/50">
+            <div className="mt-6 space-y-6">
+              {/* Hashtag Management */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <Hash className="w-4 h-4 inline mr-1" />
+                  ハッシュタグ
+                </label>
+                <HashtagManager
+                  showSelection={true}
+                  selectedHashtags={selectedHashtags}
+                  onSelectHashtags={setSelectedHashtags}
+                />
+              </div>
+
+              {/* Post Timing */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <Calendar className="w-4 h-4 inline mr-1" />
+                  投稿タイミング
+                </label>
+                <div className="space-y-3">
+                  <div className="flex space-x-4">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="timing"
+                        value="now"
+                        checked={postTiming === 'now'}
+                        onChange={(e) => setPostTiming(e.target.value as 'now' | 'scheduled')}
+                        className="mr-2"
+                      />
+                      <span>今すぐ投稿</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="timing"
+                        value="scheduled"
+                        checked={postTiming === 'scheduled'}
+                        onChange={(e) => setPostTiming(e.target.value as 'now' | 'scheduled')}
+                        className="mr-2"
+                      />
+                      <span>予約投稿</span>
+                    </label>
+                  </div>
+                  
+                  {postTiming === 'scheduled' && (
+                    <div>
+                      <input
+                        type="datetime-local"
+                        value={scheduledAt}
+                        onChange={(e) => setScheduledAt(e.target.value)}
+                        min={new Date().toISOString().slice(0, 16)}
+                        className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end">
                 <button
-                  type="button"
-                  onClick={handlePublishNow}
-                  disabled={isCreating || !caption.trim()}
-                  className="px-6 py-2 bg-gradient-to-r from-pink-600 to-purple-600 text-white rounded-lg hover:from-pink-700 hover:to-purple-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => completeStep(3)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  {isCreating ? '処理中...' : '今すぐ公開'}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => handleSubmit(e)}
-                  disabled={isCreating || !caption.trim()}
-                  className="px-6 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-lg hover:from-blue-700 hover:to-cyan-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCreating ? '処理中...' : (scheduledAt ? '投稿を予約' : '下書き保存')}
+                  次のステップへ
                 </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
+      </div>
 
-          {/* ハッシュタグ管理タブ */}
-          {activeTab === 'hashtags' && (
-            <HashtagManager
-              showSelection={true}
-              selectedHashtags={selectedHashtags}
-              onSelectHashtags={setSelectedHashtags}
-            />
-          )}
-
-          {/* 予約管理タブ */}
-          {activeTab === 'schedule' && (
-            <ScheduleManager />
-          )}
+      {/* STEP 4: Preview & Post */}
+      <div className={`bg-white rounded-xl shadow-lg border transition-all ${currentStep === 4 ? 'ring-2 ring-blue-500' : ''}`}>
+        <div 
+          className="flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50"
+          onClick={() => toggleStep(4)}
+        >
+          <div className="flex items-center space-x-4">
+            <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+              steps[4].completed ? 'bg-green-500 text-white' : 'bg-blue-500 text-white'
+            }`}>
+              {steps[4].completed ? <Check className="w-5 h-5" /> : '4'}
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">プレビュー&投稿</h2>
+              <p className="text-sm text-gray-600">最終確認と投稿実行</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <HelpCircle className="w-4 h-4 text-gray-400" title="プレビューを確認して投稿してください" />
+            {steps[4].collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
         </div>
+        
+        {!steps[4].collapsed && (
+          <div className="px-6 pb-6 border-t bg-gray-50/50">
+            <div className="mt-6 space-y-6">
+              {/* Device Toggle */}
+              <div className="flex items-center space-x-4">
+                <span className="text-sm font-medium text-gray-700">プレビューモード:</span>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setPreviewDevice('mobile')}
+                    className={`flex items-center space-x-1 px-3 py-1 rounded-lg transition-colors ${
+                      previewDevice === 'mobile' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>モバイル</span>
+                  </button>
+                  <button
+                    onClick={() => setPreviewDevice('desktop')}
+                    className={`flex items-center space-x-1 px-3 py-1 rounded-lg transition-colors ${
+                      previewDevice === 'desktop' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'
+                    }`}
+                  >
+                    <Monitor className="w-4 h-4" />
+                    <span>デスクトップ</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className={`bg-black rounded-lg p-4 ${previewDevice === 'mobile' ? 'max-w-sm' : 'max-w-md'} mx-auto`}>
+                <div className="bg-white rounded-lg overflow-hidden">
+                  {/* Header */}
+                  <div className="flex items-center p-3 border-b">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"></div>
+                    <div className="ml-3">
+                      <p className="text-sm font-semibold">your_username</p>
+                    </div>
+                  </div>
+                  
+                  {/* Media */}
+                  {mediaFiles.length > 0 && (
+                    <div className="aspect-square bg-gray-100">
+                      <img 
+                        src={mediaFiles[0]} 
+                        alt="Preview" 
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Caption */}
+                  <div className="p-3">
+                    <p className="text-sm">
+                      <span className="font-semibold">your_username</span>{' '}
+                      {caption || 'キャプションがここに表示されます...'}
+                    </p>
+                    {selectedHashtags.length > 0 && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        {selectedHashtags.map(tag => `#${tag}`).join(' ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-center space-x-4">
+                <button
+                  onClick={() => handlePublishPost(true)}
+                  disabled={isCreating}
+                  className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4 inline mr-2" />
+                  下書き保存
+                </button>
+                <button
+                  onClick={() => handlePublishPost(false)}
+                  disabled={isCreating || !caption.trim()}
+                  className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg disabled:opacity-50"
+                >
+                  {isCreating ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 inline mr-2 animate-spin" />
+                      処理中...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 inline mr-2" />
+                      {postTiming === 'scheduled' ? '投稿予約' : '今すぐ投稿'}
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
