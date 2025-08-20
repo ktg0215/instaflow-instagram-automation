@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { signIn } from 'next-auth/react';
 import { Zap } from 'lucide-react';
 
 interface LoginProps {
@@ -19,11 +20,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     setError('');
     
     try {
-      const action = isSignUp ? 'signup' : 'signin';
-      window.location.href = `/api/auth/google?action=${action}`;
+      const result = await signIn('google', {
+        redirect: false,
+        callbackUrl: '/dashboard'
+      });
+      
+      if (result?.error) {
+        throw new Error(result.error);
+      } else if (result?.ok) {
+        setSuccess('Google認証に成功しました！');
+        setTimeout(() => {
+          onLogin();
+        }, 1000);
+      }
     } catch (err) {
       console.error('Google OAuth error:', err);
-      setError('Google認証の開始に失敗しました');
+      setError('Google認証に失敗しました');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -43,7 +56,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
           throw new Error('パスワードは6文字以上で設定してください');
         }
         
-        const response = await fetch('/api/auth/signup', {
+        const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -52,40 +65,49 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         });
 
         if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'アカウント作成に失敗しました');
+          let errorMessage = 'アカウント作成に失敗しました';
+          try {
+            const error = await response.json();
+            errorMessage = error.error || errorMessage;
+          } catch {
+            // HTML response or invalid JSON - use default message
+          }
+          throw new Error(errorMessage);
         }
 
-        const { user, token } = await response.json();
-        localStorage.setItem('auth_token', token);
-        setSuccess('アカウントが作成されました！');
+        const result = await response.json();
+        setSuccess('アカウントが作成されました！ログインしてください。');
+        
+        // Switch to login mode after successful registration
+        setTimeout(() => {
+          setIsSignUp(false);
+          setPassword('');
+          setConfirmPassword('');
+        }, 2000);
+        
       } else {
-        const response = await fetch('/api/auth/signin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email, password }),
+        // Use NextAuth signIn for login
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
         });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'ログインに失敗しました');
+        
+        if (result?.error) {
+          throw new Error(result.error);
+        } else if (result?.ok) {
+          setSuccess('ログインに成功しました！');
+          setTimeout(() => {
+            onLogin();
+          }, 1000);
         }
-
-        const { user, token } = await response.json();
-        localStorage.setItem('auth_token', token);
-        setSuccess('ログインに成功しました！');
       }
       
-      setTimeout(() => {
-        onLogin();
-      }, 1000);
     } catch (err) {
       if (err instanceof Error) {
-        if (err.message.includes('Invalid login credentials')) {
+        if (err.message.includes('CredentialsSignin') || err.message.includes('Invalid login credentials')) {
           setError('メールアドレスまたはパスワードが正しくありません');
-        } else if (err.message.includes('User already registered')) {
+        } else if (err.message.includes('User already registered') || err.message.includes('既に登録されています')) {
           setError('このメールアドレスは既に登録されています');
         } else {
           setError(err.message);

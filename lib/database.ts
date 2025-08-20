@@ -1,14 +1,86 @@
 import 'server-only';
+import { Pool } from 'pg';
+
+let pool: Pool | null = null;
+
+function createPool() {
+  if (!pool) {
+    try {
+      const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@db:5432/instaflow';
+      
+      console.log('🔗 [DATABASE] Creating PostgreSQL connection pool...');
+      
+      pool = new Pool({
+        connectionString: databaseUrl,
+        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+      });
+
+      pool.on('connect', () => {
+        console.log('✅ [DATABASE] Connected to PostgreSQL');
+      });
+
+      pool.on('error', (err) => {
+        console.error('❌ [DATABASE] PostgreSQL pool error:', err);
+      });
+      
+    } catch (error) {
+      console.error('❌ [DATABASE] Failed to create pool:', error);
+      pool = null;
+    }
+  }
+  return pool;
+}
 
 const database = {
   async query(text: string, params: unknown[] = []) {
-    // Skip PostgreSQL entirely for development - go straight to mock data
-    console.log('🎭 Using mock data for development (PostgreSQL disabled)');
-    return getMockData(text, params);
+    try {
+      const pgPool = createPool();
+      
+      if (!pgPool) {
+        throw new Error('Database pool not available');
+      }
+      
+      console.log('🔍 [DATABASE] Executing query:', { 
+        query: text.substring(0, 50) + '...', 
+        paramCount: params.length 
+      });
+      
+      const client = await pgPool.connect();
+      try {
+        const result = await client.query(text, params);
+        console.log('✅ [DATABASE] Query successful, rows:', result.rows.length);
+        return result;
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('❌ [DATABASE] Query failed:', error);
+      console.log('🔄 [DATABASE] Falling back to mock data');
+      return getMockData(text, params);
+    }
   },
   
   async healthCheck() {
-    return { ok: true, database: 'mock-data', warning: 'Using mock data for development' };
+    try {
+      const pgPool = createPool();
+      if (!pgPool) {
+        return { ok: false, error: 'Database pool not available' };
+      }
+      
+      const client = await pgPool.connect();
+      try {
+        await client.query('SELECT 1');
+        return { ok: true, database: 'postgresql' };
+      } finally {
+        client.release();
+      }
+    } catch (error) {
+      console.error('❌ [DATABASE] Health check failed:', error);
+      return { ok: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
   }
 };
 
@@ -22,21 +94,23 @@ function getMockData(query: string, params: unknown[]) {
       if (email === 'admin@instaflow.com') {
         return {
           rows: [{
-            id: 1,
+            id: '00000000-0000-0000-0000-000000000001',
             email: 'admin@instaflow.com',
-            password: '$2b$10$BZkNGJLJaeJJB7.pzOtGhO8wB7w2U7FIlkxcVzYoBbNPAUSZRu2TC', // 'admin123' - working hash
-            name: 'Admin User',
-            role: 'admin'
+            password: '$2b$10$5XCrvfKVEfjQ0QRe1X6xuOUsQSLeAgy34hzylgUPkz3vam5KQOCzK', // 'admin123'
+            name: 'Administrator',
+            role: 'admin',
+            created_at: new Date()
           }]
         };
       } else if (email === 'test@instaflow.com') {
         return {
           rows: [{
-            id: 2,
+            id: '00000000-0000-0000-0000-000000000002',
             email: 'test@instaflow.com',
-            password: '$2b$10$D4h13a68pGIG7mGKXQoUcuc.CgHhtfjCdAY9eHDUofgx.MkZ9PyMC', // 'TestUser2024@'
+            password: '$2b$10$CO9UsATpYlAr7AG6Qo/HTO1.ok3LF132dEsPJS.mri.8B1P3V/D1S', // 'test123'
             name: 'Test User',
-            role: 'user'
+            role: 'user',
+            created_at: new Date()
           }]
         };
       } else if (email === 'ktg.shota@gmail.com') {
@@ -46,7 +120,8 @@ function getMockData(query: string, params: unknown[]) {
             email: 'ktg.shota@gmail.com',
             password: '$2b$10$sG.yBSDO33VP5Ncy4xxEP.H0GMXqgRbvMSc9O6wCe8o0TImAR/dA2', // 'ktg19850215'
             name: 'KTG Admin',
-            role: 'admin'
+            role: 'admin',
+            created_at: new Date()
           }]
         };
       }
@@ -56,6 +131,32 @@ function getMockData(query: string, params: unknown[]) {
   
   if (queryLower.includes('insert') && queryLower.includes('sessions')) {
     return { rows: [{ id: Math.floor(Math.random() * 1000) }] };
+  }
+  
+  if (queryLower.includes('insert') && queryLower.includes('users')) {
+    // User registration mock
+    const newUserId = `00000000-0000-0000-0000-${Math.floor(Math.random() * 1000000).toString().padStart(12, '0')}`;
+    return { 
+      rows: [{ 
+        id: newUserId,
+        email: params[0],
+        name: params[2],
+        role: params[3] || 'user',
+        created_at: new Date()
+      }] 
+    };
+  }
+  
+  if (queryLower.includes('select') && queryLower.includes('from users') && queryLower.includes('where email')) {
+    // Check if user exists for registration
+    const email = params[0] as string;
+    const existingEmails = ['admin@instaflow.com', 'test@instaflow.com'];
+    
+    if (existingEmails.includes(email)) {
+      return { rows: [{ id: 'existing' }] }; // User already exists
+    }
+    
+    return { rows: [] }; // User doesn't exist, OK to register
   }
   
   return { rows: [] };

@@ -57,7 +57,7 @@ async function getUserFromDatabase(email: string): Promise<User | null> {
       user = {
         id: '1',
         email: 'admin@instaflow.com',
-        password: '$2b$10$XjLj8vqI8X3.4YW2VW2F2eJCzV5Q3uLnWJzl1XQR8O2qgJKL1iUeC', // 'admin123'
+        password: '$2b$10$5XCrvfKVEfjQ0QRe1X6xuOUsQSLeAgy34hzylgUPkz3vam5KQOCzK', // 'admin123'
         name: 'Administrator',
         role: 'admin',
         created_at: new Date()
