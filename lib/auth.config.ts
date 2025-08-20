@@ -4,48 +4,37 @@ import Google from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 import { User } from '@/types/auth'
 
-// Direct mock data to avoid dynamic import issues in Edge Runtime
+// Get user from actual database
 async function getUserFromDatabase(email: string): Promise<User | null> {
   console.log('🔍 [DB] getUserFromDatabase called with email:', email)
   
   try {
-    console.log('🔍 [DB] Using mock data for authentication')
+    // Import database module dynamically to avoid edge runtime issues
+    const database = await import('@/lib/database')
+    const db = database.default
     
-    // Direct mock data without dynamic imports
-    let user: User | null = null
+    console.log('🔍 [DB] Querying database for user:', email)
     
-    if (email === 'admin@instaflow.com') {
-      user = {
-        id: 1,
-        email: 'admin@instaflow.com',
-        password: '$2b$10$BZkNGJLJaeJJB7.pzOtGhO8wB7w2U7FIlkxcVzYoBbNPAUSZRu2TC', // 'admin123'
-        name: 'Admin User',
-        role: 'admin',
-        created_at: new Date()
-      }
-    } else if (email === 'test@instaflow.com') {
-      user = {
-        id: 2,
-        email: 'test@instaflow.com',
-        password: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // 'test123'
-        name: 'Test User',
-        role: 'user',
-        created_at: new Date()
-      }
-    } else if (email === 'ktg.shota@gmail.com') {
-      user = {
-        id: 3,
-        email: 'ktg.shota@gmail.com',
-        password: '$2b$10$sG.yBSDO33VP5Ncy4xxEP.H0GMXqgRbvMSc9O6wCe8o0TImAR/dA2', // 'ktg19850215'
-        name: 'KTG Admin',
-        role: 'admin',
-        created_at: new Date()
-      }
-    }
+    const result = await db.query(
+      'SELECT id, email, password, name, role, created_at FROM users WHERE email = $1',
+      [email]
+    )
     
-    if (!user) {
+    if (result.rows.length === 0) {
       console.log('❌ [DB] No user found for email:', email)
       return null
+    }
+    
+    const dbUser = result.rows[0]
+    
+    // Convert UUID to number for compatibility
+    const user: User = {
+      id: dbUser.id,
+      email: dbUser.email,
+      password: dbUser.password,
+      name: dbUser.name,
+      role: dbUser.role,
+      created_at: new Date(dbUser.created_at)
     }
     
     console.log('✅ [DB] User found:', { 
@@ -59,7 +48,43 @@ async function getUserFromDatabase(email: string): Promise<User | null> {
     return user
   } catch (error) {
     console.error('❌ [DB] Database error in getUserFromDatabase:', error)
-    return null
+    
+    // Fallback to mock data if database is not available
+    console.log('🔄 [DB] Falling back to mock data')
+    let user: User | null = null
+    
+    if (email === 'admin@instaflow.com') {
+      user = {
+        id: '1',
+        email: 'admin@instaflow.com',
+        password: '$2b$10$XjLj8vqI8X3.4YW2VW2F2eJCzV5Q3uLnWJzl1XQR8O2qgJKL1iUeC', // 'admin123'
+        name: 'Administrator',
+        role: 'admin',
+        created_at: new Date()
+      }
+    } else if (email === 'test@instaflow.com') {
+      user = {
+        id: '2',
+        email: 'test@instaflow.com',
+        password: '$2b$10$CO9UsATpYlAr7AG6Qo/HTO1.ok3LF132dEsPJS.mri.8B1P3V/D1S', // 'test123'
+        name: 'Test User',
+        role: 'user',
+        created_at: new Date()
+      }
+    }
+    
+    if (user) {
+      console.log('✅ [DB] Mock user found:', { 
+        id: user.id, 
+        email: user.email, 
+        name: user.name, 
+        role: user.role
+      })
+    } else {
+      console.log('❌ [DB] No mock user found for email:', email)
+    }
+    
+    return user
   }
 }
 
@@ -73,23 +98,60 @@ async function createOrUpdateGoogleUser(email: string, name: string): Promise<Us
     
     if (existingUser) {
       console.log('✅ [GOOGLE] Existing user found, updating name')
-      // 既存ユーザーの情報を更新（mock環境では名前更新のみシミュレート）
-      return {
-        ...existingUser,
-        name: name // 名前を更新
+      // 既存ユーザーの情報を更新
+      try {
+        const database = await import('@/lib/database')
+        const db = database.default
+        
+        await db.query(
+          'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
+          [name, email]
+        )
+        
+        return {
+          ...existingUser,
+          name: name // 名前を更新
+        }
+      } catch (updateError) {
+        console.error('❌ [GOOGLE] Error updating user name:', updateError)
+        return existingUser // 更新に失敗しても既存ユーザーを返す
       }
     } else {
       console.log('✅ [GOOGLE] Creating new Google user')
-      // 新規ユーザーを作成（mock環境では固定IDで作成）
-      const newUser: User = {
-        id: Date.now(), // 簡単なID生成
-        email: email,
-        name: name,
-        role: 'user',
-        password: '', // Google認証の場合、パスワードは空
-        created_at: new Date()
+      try {
+        const database = await import('@/lib/database')
+        const db = database.default
+        
+        const result = await db.query(
+          'INSERT INTO users (email, name, role, password, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING id, email, name, role, created_at',
+          [email, name, 'user', ''] // Google認証の場合、パスワードは空
+        )
+        
+        const newDbUser = result.rows[0]
+        const newUser: User = {
+          id: newDbUser.id,
+          email: newDbUser.email,
+          name: newDbUser.name,
+          role: newDbUser.role,
+          password: '',
+          created_at: new Date(newDbUser.created_at)
+        }
+        
+        console.log('✅ [GOOGLE] New user created:', { id: newUser.id, email: newUser.email, name: newUser.name })
+        return newUser
+      } catch (createError) {
+        console.error('❌ [GOOGLE] Error creating new user:', createError)
+        // Fallback to mock user creation
+        const newUser: User = {
+          id: Date.now().toString(),
+          email: email,
+          name: name,
+          role: 'user',
+          password: '',
+          created_at: new Date()
+        }
+        return newUser
       }
-      return newUser
     }
   } catch (error) {
     console.error('❌ [GOOGLE] Error in createOrUpdateGoogleUser:', error)

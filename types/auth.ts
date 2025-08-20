@@ -1,7 +1,7 @@
 // アプリケーション全体で使用する統一された認証関連の型定義
 
 export interface User {
-  id: number;
+  id: string | number; // Support both UUID and number for compatibility
   email: string;
   name?: string;
   password?: string; // Optional for external providers
