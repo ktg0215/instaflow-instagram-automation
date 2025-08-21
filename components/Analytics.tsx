@@ -38,10 +38,11 @@ const Analytics: React.FC = () => {
     
     setLoading(true);
     try {
-      // Fetch analytics data via API instead of direct service call
-      const response = await fetch(`/api/posts?analytics=true`, {
+      // Fetch analytics data from dedicated analytics API
+      const response = await fetch('/api/analytics', {
+        method: 'GET',
+        credentials: 'include', // Include cookies for NextAuth session
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
           'Content-Type': 'application/json',
         },
       });
@@ -53,16 +54,29 @@ const Analytics: React.FC = () => {
           publishedPosts: data.publishedPosts || 0,
           scheduledPosts: data.scheduledPosts || 0,
           draftPosts: data.draftPosts || 0,
-          totalEngagement: 0,
-          averageReach: 0,
-          engagementRate: 0,
-          topPerformingPosts: []
+          totalEngagement: data.totalEngagement || 0,
+          averageReach: data.averageReach || 0,
+          engagementRate: parseFloat(data.engagementRate) || 0,
+          topPerformingPosts: data.topPerformingPosts || []
         });
       } else {
-        console.error('Failed to fetch analytics');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Failed to fetch analytics:', errorData);
+        throw new Error(errorData.error || 'Failed to fetch analytics');
       }
     } catch (error) {
       console.error('Analytics load error:', error);
+      // Set default analytics data on error
+      setAnalytics({
+        totalPosts: 0,
+        publishedPosts: 0,
+        scheduledPosts: 0,
+        draftPosts: 0,
+        totalEngagement: 0,
+        averageReach: 0,
+        engagementRate: 0,
+        topPerformingPosts: []
+      });
     } finally {
       setLoading(false);
     }

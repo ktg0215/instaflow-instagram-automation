@@ -159,6 +159,47 @@ function getMockData(query: string, params: unknown[]) {
     return { rows: [] }; // User doesn't exist, OK to register
   }
   
+  if (queryLower.includes('count') && queryLower.includes('posts')) {
+    // Analytics query for post statistics
+    return {
+      rows: [{
+        total_posts: 12,
+        published_posts: 8,
+        scheduled_posts: 2,
+        draft_posts: 2
+      }]
+    };
+  }
+  
+  if (queryLower.includes('select') && queryLower.includes('posts') && queryLower.includes('order by created_at desc')) {
+    // Recent posts for analytics
+    return {
+      rows: [
+        {
+          id: '1',
+          caption: 'サンプル投稿1 - AIで生成された魅力的なキャプション',
+          status: 'published',
+          created_at: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
+          scheduled_at: null
+        },
+        {
+          id: '2', 
+          caption: 'サンプル投稿2 - Instagramマーケティングの成功事例',
+          status: 'published',
+          created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+          scheduled_at: null
+        },
+        {
+          id: '3',
+          caption: 'サンプル投稿3 - ソーシャルメディア戦略について',
+          status: 'scheduled',
+          created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000), // 3 days ago
+          scheduled_at: new Date(Date.now() + 24 * 60 * 60 * 1000) // tomorrow
+        }
+      ]
+    };
+  }
+  
   return { rows: [] };
 }
 
