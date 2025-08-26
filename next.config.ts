@@ -2,31 +2,18 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   webpack: (config, { isServer, webpack }) => {
-    // Server-side configuration
+    // Server-side configuration - allow pg modules
     if (isServer) {
-      // Ensure server-only packages are external
+      // Ensure server-only packages are external (but available)
       if (!config.externals) {
         config.externals = [];
       }
       if (Array.isArray(config.externals)) {
         config.externals.push('pg-native');
       }
-    }
-    
-    // Global configuration - exclude problematic packages from both server and client
-    config.plugins = config.plugins || [];
-    
-    // Note: NextAuth v5 is compatible with Edge Runtime, allowing middleware usage
-    
-    // Exclude database packages
-    config.plugins.push(
-      new webpack.IgnorePlugin({
-        resourceRegExp: /^(pg|pg-connection-string|pg-native)$/,
-      })
-    );
-    
-    if (!isServer) {
+    } else {
       // Client-side configuration - completely exclude server modules
+      config.resolve = config.resolve || {};
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
@@ -38,46 +25,32 @@ const nextConfig: NextConfig = {
         module: false,
         pg: false,
         'pg-native': false,
+        'pg-connection-string': false,
       };
       
+      // Only ignore on client side
+      config.plugins = config.plugins || [];
       config.plugins.push(
         new webpack.IgnorePlugin({
-          resourceRegExp: /^\.\/lib\/database$/,
-          contextRegExp: /lib/,
+          resourceRegExp: /^(pg|pg-connection-string)$/,
+          contextRegExp: /^(?!.*server)/,
         })
       );
       
-      // Alias everything to false
+      // Alias database modules to false on client side only
       config.resolve.alias = {
         ...config.resolve.alias,
         'pg': false,
         'pg-native': false,
         'pg-connection-string': false,
-        // All possible database import paths
-        '../lib/database': false,
-        './lib/database': false,
-        '@/lib/database': false,
-        '../../lib/database': false,
-        '../../../lib/database': false,
-        '../../../../lib/database': false,
       };
-      
-      // Alternative: replace with empty module
-      config.externals = config.externals || [];
-      if (Array.isArray(config.externals)) {
-        config.externals.push({
-          'pg': '{}',
-          'pg-connection-string': '{}',
-          'pg-native': '{}',
-        });
-      }
     }
     
     return config;
   },
   
-  // External packages for server-side only  
-  serverExternalPackages: ['pg', 'pg-connection-string', 'pg-native']
+  // External packages for server-side only (but still available for import)
+  serverExternalPackages: ['pg-native']
 };
 
 export default nextConfig;

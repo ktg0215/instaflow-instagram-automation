@@ -1,36 +1,36 @@
 {
   "mcpServers": {
-    "playwright-gui": {
+    "playwright": {
       "command": "npx",
-      "args": ["playwright", "codegen"],
-      "env": {
-        "DISPLAY": ":0"
-      }
-    },
-    "puppeteer": {
-      "command": "docker",
       "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "DOCKER_CONTAINER=true",
-        "mcp/puppeteer"
+        "@playwright/mcp@latest"
       ],
       "env": {
-        "DOCKER_CONTAINER": "true"
+        "PLAYWRIGHT_BROWSERS_PATH": "0"
       }
     },
     "filesystem": {
       "command": "npx",
       "args": [
         "@modelcontextprotocol/server-filesystem",
-        "/mnt/c/プログラミング/insta-new"
+        "C:\\プログラミング\\insta-new"
       ]
     },
     "gitmcp": {
       "type": "sse",
       "url": "https://gitmcp.io/ktg0215/insta"
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "@supabase/mcp-server-supabase@latest"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "sbp_bee31f0d57151b78e89c4f471aa50ece1cd0d06d",
+        "SUPABASE_PROJECT_REF": "toxslmnnomfdkwtamvhk",
+        "SUPABASE_REGION": "ap-northeast-1",
+        "SUPABASE_DB_PASSWORD": "xb87Jv_PB4LzFt?"
+      }
     }
   }
 }

@@ -1,21 +1,18 @@
 import { NextResponse } from 'next/server';
-import jwt from 'jsonwebtoken';
+import { auth } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
-    // JWT認証チェック
-    const auth = request.headers.get('authorization') || '';
-    const token = auth.replace(/^Bearer\s+/i, '');
+    const session = await auth();
     
-    if (!token) {
+    if (!session?.user) {
       return NextResponse.json(
-        { success: false, error: '認証トークンが必要です' },
+        { success: false, error: '認証が必要です' },
         { status: 401 }
       );
     }
 
-    const jwtSecret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret';
-    const decoded = jwt.verify(token, jwtSecret) as { userId: string };
+    const userId = session.user.id;
     
     // モック実装：実際のAPIでは以下の処理が必要
     // 1. データベースからユーザーのInstagram接続情報を削除
@@ -25,7 +22,7 @@ export async function POST(request: Request) {
     // リアルなAPI遅延をシミュレート
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    console.log(`Instagram disconnection for user ${decoded.userId} (mock)`);
+    console.log(`Instagram disconnection for user ${userId} (mock)`);
 
     return NextResponse.json({
       success: true,

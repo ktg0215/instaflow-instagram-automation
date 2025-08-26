@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { PostService } from '@/services/postService'
-import jwt from 'jsonwebtoken'
+import { auth } from '@/lib/auth'
 
 // GET /api/posts/[id] - 特定の投稿取得
 export async function GET(
@@ -8,15 +8,13 @@ export async function GET(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = request.headers.get('authorization') || ''
-    const token = auth.replace(/^Bearer\s+/i, '')
+    const session = await auth()
     
-    if (!token) {
-      return NextResponse.json({ error: '認証トークンが必要です' }, { status: 401 })
+    if (!session?.user) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    const jwtSecret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret'
-    const decoded = jwt.verify(token, jwtSecret) as { userId: string }
+    const userId = session.user.id
     
     const params = await context.params;
     const post = await PostService.getPostById(params.id)
@@ -34,13 +32,6 @@ export async function GET(
 
   } catch (error: any) {
     console.error('投稿取得エラー:', error)
-    
-    if (error.name === 'TokenExpiredError') {
-      return NextResponse.json({ error: 'トークンが期限切れです' }, { status: 401 })
-    } else if (error.name === 'JsonWebTokenError') {
-      return NextResponse.json({ error: '無効なトークンです' }, { status: 401 })
-    }
-    
     return NextResponse.json({ error: '投稿の取得に失敗しました' }, { status: 500 })
   }
 }
@@ -51,15 +42,13 @@ export async function PUT(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = request.headers.get('authorization') || ''
-    const token = auth.replace(/^Bearer\s+/i, '')
+    const session = await auth()
     
-    if (!token) {
-      return NextResponse.json({ error: '認証トークンが必要です' }, { status: 401 })
+    if (!session?.user) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    const jwtSecret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret'
-    const decoded = jwt.verify(token, jwtSecret) as { userId: string }
+    const userId = session.user.id
     
     const params = await context.params;
     // 投稿の存在確認と所有者チェック
@@ -106,13 +95,6 @@ export async function PUT(
 
   } catch (error: any) {
     console.error('投稿更新エラー:', error)
-    
-    if (error.name === 'TokenExpiredError') {
-      return NextResponse.json({ error: 'トークンが期限切れです' }, { status: 401 })
-    } else if (error.name === 'JsonWebTokenError') {
-      return NextResponse.json({ error: '無効なトークンです' }, { status: 401 })
-    }
-    
     return NextResponse.json({ error: error.message || '投稿の更新に失敗しました' }, { status: 500 })
   }
 }
@@ -123,15 +105,13 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = request.headers.get('authorization') || ''
-    const token = auth.replace(/^Bearer\s+/i, '')
+    const session = await auth()
     
-    if (!token) {
-      return NextResponse.json({ error: '認証トークンが必要です' }, { status: 401 })
+    if (!session?.user) {
+      return NextResponse.json({ error: '認証が必要です' }, { status: 401 })
     }
 
-    const jwtSecret = process.env.JWT_SECRET || process.env.NEXTAUTH_SECRET || 'development-secret'
-    const decoded = jwt.verify(token, jwtSecret) as { userId: string }
+    const userId = session.user.id
     
     const params = await context.params;
     // 投稿の存在確認と所有者チェック
@@ -140,7 +120,7 @@ export async function DELETE(
       return NextResponse.json({ error: '投稿が見つかりません' }, { status: 404 })
     }
 
-    if (existingPost.user_id !== decoded.userId) {
+    if (existingPost.user_id !== userId) {
       return NextResponse.json({ error: 'アクセス権限がありません' }, { status: 403 })
     }
     
@@ -149,13 +129,6 @@ export async function DELETE(
 
   } catch (error: any) {
     console.error('投稿削除エラー:', error)
-    
-    if (error.name === 'TokenExpiredError') {
-      return NextResponse.json({ error: 'トークンが期限切れです' }, { status: 401 })
-    } else if (error.name === 'JsonWebTokenError') {
-      return NextResponse.json({ error: '無効なトークンです' }, { status: 401 })
-    }
-    
     return NextResponse.json({ error: error.message || '投稿の削除に失敗しました' }, { status: 500 })
   }
 }

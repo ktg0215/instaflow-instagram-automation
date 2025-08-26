@@ -19,26 +19,21 @@ npx playwright test            # Run all Playwright tests
 npx playwright test --ui       # Run tests with UI mode
 npx playwright show-report     # View test results
 
-# Docker Development (Recommended)
-docker-compose up -d           # Start all services (app + PostgreSQL + pgAdmin)
-docker-compose -f docker-compose.dev.yml up -d  # Development mode
-docker-compose down            # Stop services
-docker-compose logs -f app     # View app logs
-docker-compose exec db psql -U postgres -d instaflow  # Connect to database
-docker-compose restart app     # Restart app after dependency changes
+# Supabase Database Management
+# Database is hosted on Supabase - no local setup required
 ```
 
 ## Architecture Overview
 
-This is a **Next.js 15 Instagram automation platform** with custom JWT authentication and PostgreSQL database integration.
+This is a **Next.js 15 Instagram automation platform** with custom JWT authentication and Supabase PostgreSQL integration.
 
 ### Core Technical Stack
 - **Next.js 15** with App Router (React 19)
-- **PostgreSQL** with direct SQL queries (no ORM)
+- **Supabase PostgreSQL** with direct SQL queries (no ORM)
 - **Custom JWT authentication** (despite NextAuth imports, uses custom implementation)
 - **React Query** for server state management
 - **Google Gemini AI** for content generation
-- **Docker containerized** development environment
+- **Supabase hosted database** for cloud deployment
 
 ### Critical Server/Client Separation
 
@@ -142,10 +137,15 @@ if (!response.ok) {
 ## Environment Variables
 
 ```bash
-# Core
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/instaflow
+# Core Authentication
 JWT_SECRET=your-secret
 NEXTAUTH_SECRET=your-secret  # Used as JWT fallback
+
+# Supabase Configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+DATABASE_URL=postgresql://postgres.your-project:your-password@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres
 
 # External APIs (Optional for development)
 INSTAGRAM_ACCESS_TOKEN=your-token
@@ -156,7 +156,7 @@ GOOGLE_CLIENT_SECRET=your-secret
 
 ## Development Workflow
 
-**Docker-First Development**: Always use Docker for consistent PostgreSQL environment.
+**Supabase-First Development**: Database is hosted on Supabase - no local setup required.
 
 **Health Checks**: 
 - `/api/health` - Basic app health
@@ -164,7 +164,7 @@ GOOGLE_CLIENT_SECRET=your-secret
 
 **Mock Development**: Core features work without external API keys using mocks.
 
-**Hot Reload**: Docker supports hot reload with volume mounting.
+**Hot Reload**: Next.js development server supports hot reload out of the box.
 
 ## Key Architectural Files
 
@@ -194,7 +194,7 @@ GOOGLE_CLIENT_SECRET=your-secret
 - ✅ Instagram API mock/real implementations
 - ✅ Hashtag management system
 - ✅ Scheduled posting functionality
-- ✅ Docker containerization with pgAdmin
+- ✅ Supabase cloud database integration
 - ✅ Comprehensive error handling
 - ✅ Server/client separation (PostgreSQL bundling issue resolved)
 
@@ -223,30 +223,18 @@ GOOGLE_CLIENT_SECRET=your-secret
 - Middleware-based route protection
 - Input validation and sanitization
 
-## Docker Configuration
+## Supabase Configuration
 
-**Services**:
-- **app**: Next.js application (port 3000/3007)
-- **db**: PostgreSQL 15 (port 5432)
-- **pgadmin**: Database management UI (port 5050)
+**Database**: Hosted PostgreSQL on Supabase with built-in management tools.
 
-**Volumes**: Persistent PostgreSQL data and pgAdmin configuration.
-
-**Development**: Use `docker-compose.dev.yml` for development with hot reload.
+**Development**: Access database via Supabase dashboard or direct PostgreSQL connection.
 
 ## Common Development Tasks
 
 **Database Operations**:
-```bash
-# Connect to database
-docker-compose exec db psql -U postgres -d instaflow
-
-# Reset database
-docker-compose down -v && docker-compose up -d
-
-# View database logs
-docker-compose logs -f db
-```
+- Use Supabase dashboard for visual database management
+- Direct SQL queries via MCP Supabase integration
+- Health checks via `/api/health/db` endpoint
 
 **API Testing**:
 ```bash

@@ -4,88 +4,54 @@ import Google from 'next-auth/providers/google'
 import bcrypt from 'bcryptjs'
 import { User } from '@/types/auth'
 
-// Get user from actual database
+// Get user from mock data (database disabled for testing)
 async function getUserFromDatabase(email: string): Promise<User | null> {
-  console.log('🔍 [DB] getUserFromDatabase called with email:', email)
+  console.log('🔍 [MOCK] getUserFromDatabase called with email:', email)
   
-  try {
-    // Import database module dynamically to avoid edge runtime issues
-    const database = await import('@/lib/database')
-    const db = database.default
-    
-    console.log('🔍 [DB] Querying database for user:', email)
-    
-    const result = await db.query(
-      'SELECT id, email, password, name, role, created_at FROM users WHERE email = $1',
-      [email]
-    )
-    
-    if (result.rows.length === 0) {
-      console.log('❌ [DB] No user found for email:', email)
-      return null
+  // Mock users for development/testing only
+  // In production, this would connect to a real database
+  const mockUsers: { [key: string]: User } = {
+    'admin@instaflow.com': {
+      id: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+      email: 'admin@instaflow.com',
+      password: '$2b$10$5XCrvfKVEfjQ0QRe1X6xuOUsQSLeAgy34hzylgUPkz3vam5KQOCzK',
+      name: 'システム管理者',
+      role: 'admin',
+      created_at: new Date()
+    },
+    'user@instaflow.com': {
+      id: 'c3d4e5f6-a7b8-9012-3456-789012cdefgh',
+      email: 'user@instaflow.com',
+      password: '$2b$10$CO9UsATpYlAr7AG6Qo/HTO1.ok3LF132dEsPJS.mri.8B1P3V/D1S',
+      name: '一般ユーザー',
+      role: 'user',
+      created_at: new Date()
+    },
+    'ktg.shota@gmail.com': {
+      id: 'b2c3d4e5-f6a7-8901-2345-678901bcdefg',
+      email: 'ktg.shota@gmail.com',
+      password: '$2b$10$sG.yBSDO33VP5Ncy4xxEP.H0GMXqgRbvMSc9O6wCe8o0TImAR/dA2',
+      name: 'KTG管理者',
+      role: 'admin',
+      created_at: new Date()
     }
-    
-    const dbUser = result.rows[0]
-    
-    // Convert UUID to number for compatibility
-    const user: User = {
-      id: dbUser.id,
-      email: dbUser.email,
-      password: dbUser.password,
-      name: dbUser.name,
-      role: dbUser.role,
-      created_at: new Date(dbUser.created_at)
-    }
-    
-    console.log('✅ [DB] User found:', { 
+  }
+  
+  const user = mockUsers[email] || null
+  
+  if (user) {
+    console.log('✅ [MOCK] User found:', { 
       id: user.id, 
       email: user.email, 
       name: user.name, 
       role: user.role,
       passwordHash: user.password.substring(0, 10) + '...'
     })
-    
-    return user
-  } catch (error) {
-    console.error('❌ [DB] Database error in getUserFromDatabase:', error)
-    
-    // Fallback to mock data if database is not available
-    console.log('🔄 [DB] Falling back to mock data')
-    let user: User | null = null
-    
-    if (email === 'admin@instaflow.com') {
-      user = {
-        id: '1',
-        email: 'admin@instaflow.com',
-        password: '$2b$10$5XCrvfKVEfjQ0QRe1X6xuOUsQSLeAgy34hzylgUPkz3vam5KQOCzK', // 'admin123'
-        name: 'Administrator',
-        role: 'admin',
-        created_at: new Date()
-      }
-    } else if (email === 'test@instaflow.com') {
-      user = {
-        id: '2',
-        email: 'test@instaflow.com',
-        password: '$2b$10$CO9UsATpYlAr7AG6Qo/HTO1.ok3LF132dEsPJS.mri.8B1P3V/D1S', // 'test123'
-        name: 'Test User',
-        role: 'user',
-        created_at: new Date()
-      }
-    }
-    
-    if (user) {
-      console.log('✅ [DB] Mock user found:', { 
-        id: user.id, 
-        email: user.email, 
-        name: user.name, 
-        role: user.role
-      })
-    } else {
-      console.log('❌ [DB] No mock user found for email:', email)
-    }
-    
-    return user
+  } else {
+    console.log('❌ [MOCK] No user found for email:', email)
   }
+  
+  return user
 }
 
 // Google OAuth用のユーザー作成/更新関数
