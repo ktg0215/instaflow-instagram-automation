@@ -53,13 +53,8 @@ function validateJWTSecret(): string {
     throw new Error('NEXTAUTH_SECRET or JWT_SECRET must be configured')
   }
   
-  // SECURITY: Allow development secrets in development environment only
-  if (process.env.NODE_ENV === 'production') {
-    if (secret.includes('development') || secret.length < 32) {
-      throw new Error('JWT secret must be at least 32 characters and not contain "development" in production')
-    }
-  } else if (secret.length < 8) {
-    throw new Error('JWT secret must be at least 8 characters in development')
+  if (secret.includes('development') || secret.length < 32) {
+    throw new Error('JWT secret must be at least 32 characters and not contain "development"')
   }
   
   return secret

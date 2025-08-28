@@ -22,9 +22,9 @@ export default auth(async (req) => {
     return response;
   }
   
-  // console.log('🚀 NextAuth v5 Middleware: Processing', pathname)
-  // console.log('🔍 Session:', req.auth ? 'Found' : 'Not found')
-  // console.log('🔒 Client IP:', getClientIP(req))
+  console.log('🚀 NextAuth v5 Middleware: Processing', pathname)
+  console.log('🔍 Session:', req.auth ? 'Found' : 'Not found')
+  console.log('🔒 Client IP:', getClientIP(req))
 
   const isOnLoginPage = pathname === '/login' || pathname === '/signup'
   const isOnLandingPage = pathname === '/'
@@ -35,11 +35,11 @@ export default auth(async (req) => {
 
   const isLoggedIn = !!req.auth
 
-  // if (isLoggedIn) {
-  //   console.log('🔐 User authenticated:', req.auth?.user?.email)
-  // } else {
-  //   console.log('🔓 No authentication found')
-  // }
+  if (isLoggedIn) {
+    console.log('🔐 User authenticated:', req.auth?.user?.email)
+  } else {
+    console.log('🔓 No authentication found')
+  }
 
   // SECURITY: Create response with security headers
   let response: NextResponse;
@@ -51,23 +51,23 @@ export default auth(async (req) => {
   }
   // Allow authenticated users to access login/signup pages
   else if (isLoggedIn && isOnLoginPage) {
-    // console.log('🔐 Authenticated user accessing login page - allowing access')
+    console.log('🔐 Authenticated user accessing login page - allowing access')
     response = NextResponse.next()
   }
   // Allow everyone to access landing page
   else if (isOnLandingPage) {
-    // console.log('🏠 Landing page access allowed')
+    console.log('🏠 Landing page access allowed')
     response = NextResponse.next()
   }
   // Redirect unauthenticated users away from protected routes
   else if (isProtectedRoute && !isLoggedIn) {
-    // console.log('❌ Redirecting unauthenticated user to login')
+    console.log('❌ Redirecting unauthenticated user to login')
     const loginUrl = new URL('/login', req.url)
     loginUrl.searchParams.set('callbackUrl', pathname)
     response = NextResponse.redirect(loginUrl)
   }
   else {
-    // console.log('✅ Request authorized')
+    console.log('✅ Request authorized')
     response = NextResponse.next()
   }
 

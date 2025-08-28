@@ -6,10 +6,6 @@ const CONNECTION_ATTEMPTS = new Map<string, { count: number; lastAttempt: number
 const MAX_ATTEMPTS = 10;
 const RATE_LIMIT_WINDOW = 60000; // 1 minute
 
-// Performance: Query result caching
-const queryCache = new Map<string, { result: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
 let pool: Pool | null = null;
 
 // SECURITY: Validate database URL format
@@ -71,15 +67,12 @@ function createPool() {
           rejectUnauthorized: true, // SECURITY: Enforce SSL certificate validation
           ca: process.env.DB_SSL_CA, // Allow custom CA if needed
         },
-        max: Math.min(20, Math.max(5, parseInt(process.env.DB_POOL_MAX || '10'))), // Optimized for performance
-        min: 2,
-        idleTimeoutMillis: 60000, // Increased for better connection reuse
-        connectionTimeoutMillis: 8000,
-        acquireTimeoutMillis: 8000,
+        max: Math.min(5, Math.max(2, parseInt(process.env.DB_POOL_MAX || '3'))), // SECURITY: Limit max connections
+        min: 1,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000, // SECURITY: Shorter timeout
+        acquireTimeoutMillis: 5000,
         maxUses: 7500,
-        // Performance optimizations
-        keepAlive: true,
-        keepAliveInitialDelayMillis: 0,
         // SECURITY: Additional connection settings
         application_name: 'insta-automation-platform',
         statement_timeout: 30000, // 30 second query timeout
@@ -102,16 +95,6 @@ function createPool() {
   return pool;
 }
 
-// Performance: Cache key generation
-function generateCacheKey(text: string, params: unknown[]): string {
-  return `${text}|${JSON.stringify(params)}`;
-}
-
-// Performance: Check if query should be cached (only SELECT queries)
-function shouldCacheQuery(text: string): boolean {
-  return text.trim().toUpperCase().startsWith('SELECT');
-}
-
 const database = {
   async query(text: string, params: unknown[] = []) {
     try {
@@ -129,16 +112,6 @@ const database = {
       if (!Array.isArray(params)) {
         throw new Error('Parameters must be an array');
       }
-
-      // Performance: Check cache for read queries
-      const cacheKey = generateCacheKey(text, params);
-      if (shouldCacheQuery(text)) {
-        const cached = queryCache.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-          console.log('🚀 [DATABASE] Cache hit for query');
-          return cached.result;
-        }
-      }
       
       // SECURITY: Query logging without sensitive data
       console.log('🔍 [DATABASE] Executing query type:', text.split(' ')[0]?.toUpperCase());
@@ -150,19 +123,6 @@ const database = {
         await client.query('SET statement_timeout = 30000');
         
         const result = await client.query(text, params);
-        
-        // Performance: Cache successful read queries
-        if (shouldCacheQuery(text)) {
-          queryCache.set(cacheKey, { result, timestamp: Date.now() });
-          
-          // Cleanup old cache entries (simple LRU-like behavior)
-          if (queryCache.size > 100) {
-            const entries = Array.from(queryCache.entries());
-            entries.sort((a, b) => a[1].timestamp - b[1].timestamp);
-            entries.slice(0, 50).forEach(([key]) => queryCache.delete(key));
-          }
-        }
-        
         console.log('✅ [DATABASE] Query successful, rows:', result.rows.length);
         return result;
       } finally {
@@ -174,12 +134,6 @@ const database = {
       const mockResult = getMockData(text, params);
       return mockResult;
     }
-  },
-
-  // Performance: Clear cache manually when needed
-  clearCache() {
-    queryCache.clear();
-    console.log('🧹 [DATABASE] Query cache cleared');
   },
   
   async healthCheck() {

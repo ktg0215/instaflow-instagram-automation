@@ -136,7 +136,11 @@ export const usePosts = (status?: string) => {
     queryKey: ['posts', status],
     queryFn: () => token ? postsAPI.getUserPosts(token, status) : Promise.resolve([]),
     enabled: !!token,
-    refetchInterval: 30000, // 30秒ごとに更新
+    staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh
+    gcTime: 10 * 60 * 1000, // 10 minutes - cache retention time
+    refetchOnWindowFocus: false, // Prevent refetch on window focus
+    refetchInterval: false, // Disable automatic refetching
+    refetchIntervalInBackground: false,
   });
 
   const createPostMutation = useMutation({
@@ -144,8 +148,13 @@ export const usePosts = (status?: string) => {
       if (!token) throw new Error('認証が必要です');
       return postsAPI.createPost(token, postData);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
+    onSuccess: (newPost) => {
+      // Optimistic updates instead of invalidating entire cache
+      queryClient.setQueryData(['posts'], (oldData: Post[] = []) => [newPost, ...oldData]);
+      queryClient.setQueryData(['posts', newPost.status], (oldData: Post[] = []) => [newPost, ...oldData]);
+      
+      // Only invalidate when necessary
+      queryClient.invalidateQueries({ queryKey: ['posts'], exact: false });
     },
   });
 

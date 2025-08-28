@@ -1,6 +1,52 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Performance optimizations
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production'
+  },
+  experimental: {
+    optimizeCss: true,
+    optimizeServerReact: true,
+    optimizePackageImports: ['lucide-react', '@google/generative-ai'],
+  },
+  
+  // Bundle optimization
+  images: {
+    formats: ['image/webp', 'image/avif'],
+    minimumCacheTTL: 60,
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+  },
+  
+  // Compression and optimization
+  compress: true,
+  poweredByHeader: false,
+  
+  // Performance headers
+  async headers() {
+    return [
+      {
+        source: '/:all*(svg|jpg|png|webp|avif)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+    ];
+  },
+  
   webpack: (config, { isServer, webpack }) => {
     // Server-side configuration - allow pg modules
     if (isServer) {

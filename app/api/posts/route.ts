@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { PostService } from '@/services/postService'
 import { verifyAuth } from '@/lib/auth'
 
+// Performance: Response caching
+const responseCache = new Map<string, { data: any; timestamp: number; etag: string }>()
+const CACHE_DURATION = 2 * 60 * 1000 // 2 minutes
+
+function generateETag(data: any): string {
+  return Buffer.from(JSON.stringify(data)).toString('base64').substring(0, 16)
+}
+
+function getCacheKey(userId: string, status?: string): string {
+  return `posts_${userId}_${status || 'all'}`
+}
+
 // GET /api/posts - ユーザーの投稿一覧取得
 export async function GET(request: NextRequest) {
   try {
@@ -13,15 +25,58 @@ export async function GET(request: NextRequest) {
     
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const limit = parseInt(searchParams.get('limit') || '50')
+    const offset = parseInt(searchParams.get('offset') || '0')
+    
+    // Performance: Check cache first
+    const cacheKey = getCacheKey(String(user.id), status || undefined)
+    const cached = responseCache.get(cacheKey)
+    
+    if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
+      // Check If-None-Match header for 304 Not Modified
+      const ifNoneMatch = request.headers.get('if-none-match')
+      if (ifNoneMatch === cached.etag) {
+        return new NextResponse(null, { status: 304 })
+      }
+      
+      return NextResponse.json(cached.data, {
+        headers: {
+          'ETag': cached.etag,
+          'Cache-Control': 'private, max-age=120', // 2 minutes
+        }
+      })
+    }
     
     let posts
     if (status) {
       posts = await PostService.getPostsByStatus(String(user.id), status)
     } else {
-      posts = await PostService.getUserPosts(String(user.id))
+      posts = await PostService.getUserPosts(String(user.id), limit, offset)
     }
 
-    return NextResponse.json({ posts })
+    const responseData = { posts }
+    const etag = generateETag(responseData)
+    
+    // Performance: Cache the response
+    responseCache.set(cacheKey, {
+      data: responseData,
+      timestamp: Date.now(),
+      etag
+    })
+    
+    // Cleanup old cache entries
+    if (responseCache.size > 100) {
+      const entries = Array.from(responseCache.entries())
+      entries.sort((a, b) => a[1].timestamp - b[1].timestamp)
+      entries.slice(0, 50).forEach(([key]) => responseCache.delete(key))
+    }
+
+    return NextResponse.json(responseData, {
+      headers: {
+        'ETag': etag,
+        'Cache-Control': 'private, max-age=120', // 2 minutes
+      }
+    })
 
   } catch (error: any) {
     console.error('投稿取得エラー:', error)
@@ -74,7 +129,17 @@ export async function POST(request: NextRequest) {
     }
 
     const post = await PostService.createPost(postData)
-    return NextResponse.json({ post }, { status: 201 })
+    
+    // Performance: Invalidate relevant caches after creation
+    const userCacheKeys = Array.from(responseCache.keys()).filter(key => key.startsWith(`posts_${user.id}`))
+    userCacheKeys.forEach(key => responseCache.delete(key))
+    
+    return NextResponse.json({ post }, { 
+      status: 201,
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    })
 
   } catch (error: any) {
     console.error('投稿作成エラー:', error)

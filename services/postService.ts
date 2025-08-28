@@ -62,14 +62,15 @@ export class PostService {
     }
   }
 
-  static async getUserPosts(userId: string): Promise<Post[]> {
+  static async getUserPosts(userId: string, limit: number = 50, offset: number = 0): Promise<Post[]> {
     try {
       const result = await database.query(
         `SELECT id, user_id, instagram_account_id, caption, image_url, status, scheduled_at, published_at, instagram_post_id, likes_count, comments_count, created_at, updated_at
          FROM posts 
          WHERE user_id = $1 
-         ORDER BY created_at DESC`,
-        [userId]
+         ORDER BY created_at DESC
+         LIMIT $2 OFFSET $3`,
+        [userId, limit, offset]
       );
 
       return result.rows;
@@ -176,6 +177,10 @@ export class PostService {
     scheduledPosts: number;
     publishedPosts: number;
     draftPosts: number;
+    totalLikes: number;
+    totalComments: number;
+    averageLikes: number;
+    averageComments: number;
   }> {
     try {
       const result = await database.query(
@@ -183,7 +188,11 @@ export class PostService {
            COUNT(*) as total_posts,
            COUNT(CASE WHEN status = 'scheduled' THEN 1 END) as scheduled_posts,
            COUNT(CASE WHEN status = 'published' THEN 1 END) as published_posts,
-           COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_posts
+           COUNT(CASE WHEN status = 'draft' THEN 1 END) as draft_posts,
+           SUM(likes_count) as total_likes,
+           SUM(comments_count) as total_comments,
+           AVG(likes_count) as average_likes,
+           AVG(comments_count) as average_comments
          FROM posts 
          WHERE user_id = $1`,
         [userId]
@@ -195,6 +204,10 @@ export class PostService {
         scheduledPosts: parseInt(row.scheduled_posts) || 0,
         publishedPosts: parseInt(row.published_posts) || 0,
         draftPosts: parseInt(row.draft_posts) || 0,
+        totalLikes: parseInt(row.total_likes) || 0,
+        totalComments: parseInt(row.total_comments) || 0,
+        averageLikes: parseFloat(row.average_likes) || 0,
+        averageComments: parseFloat(row.average_comments) || 0,
       };
     } catch (error) {
       console.error('投稿分析エラー:', error);
@@ -203,6 +216,10 @@ export class PostService {
         scheduledPosts: 0,
         publishedPosts: 0,
         draftPosts: 0,
+        totalLikes: 0,
+        totalComments: 0,
+        averageLikes: 0,
+        averageComments: 0,
       };
     }
   }

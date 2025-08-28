@@ -1,0 +1,284 @@
+import { NextAuthConfig } from 'next-auth'
+import Credentials from 'next-auth/providers/credentials'
+import Google from 'next-auth/providers/google'
+import bcrypt from 'bcryptjs'
+import { User } from '@/types/auth'
+
+// Get user from mock data (database disabled for testing)
+async function getUserFromDatabase(email: string): Promise<User | null> {
+  // console.log('🔍 [MOCK] getUserFromDatabase called with email:', email)
+  
+  // Mock users for development/testing only
+  // In production, this would connect to a real database
+  const mockUsers: { [key: string]: User } = {
+    'admin@instaflow.com': {
+      id: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+      email: 'admin@instaflow.com',
+      password: '$2b$10$5XCrvfKVEfjQ0QRe1X6xuOUsQSLeAgy34hzylgUPkz3vam5KQOCzK',
+      name: 'システム管理者',
+      role: 'admin',
+      created_at: new Date()
+    },
+    'user@instaflow.com': {
+      id: 'c3d4e5f6-a7b8-9012-3456-789012cdefgh',
+      email: 'user@instaflow.com',
+      password: '$2b$10$CO9UsATpYlAr7AG6Qo/HTO1.ok3LF132dEsPJS.mri.8B1P3V/D1S',
+      name: '一般ユーザー',
+      role: 'user',
+      created_at: new Date()
+    },
+    'ktg.shota@gmail.com': {
+      id: 'b2c3d4e5-f6a7-8901-2345-678901bcdefg',
+      email: 'ktg.shota@gmail.com',
+      password: '$2b$10$sG.yBSDO33VP5Ncy4xxEP.H0GMXqgRbvMSc9O6wCe8o0TImAR/dA2',
+      name: 'KTG管理者',
+      role: 'admin',
+      created_at: new Date()
+    }
+  }
+  
+  const user = mockUsers[email] || null
+  
+  // if (user) {
+  //   console.log('✅ [MOCK] User found:', { 
+  //     id: user.id, 
+  //     email: user.email, 
+  //     name: user.name, 
+  //     role: user.role,
+  //     passwordHash: user.password.substring(0, 10) + '...'
+  //   })
+  // } else {
+  //   console.log('❌ [MOCK] No user found for email:', email)
+  // }
+  
+  return user
+}
+
+// Google OAuth用のユーザー作成/更新関数
+async function createOrUpdateGoogleUser(email: string, name: string): Promise<User | null> {
+  try {
+    console.log('🔍 [GOOGLE] createOrUpdateGoogleUser called:', { email, name })
+    
+    // 既存ユーザーをチェック
+    const existingUser = await getUserFromDatabase(email)
+    
+    if (existingUser) {
+      console.log('✅ [GOOGLE] Existing user found, updating name')
+      // 既存ユーザーの情報を更新
+      try {
+        const database = await import('@/lib/database')
+        const db = database.default
+        
+        await db.query(
+          'UPDATE users SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE email = $2',
+          [name, email]
+        )
+        
+        return {
+          ...existingUser,
+          name: name // 名前を更新
+        }
+      } catch (updateError) {
+        console.error('❌ [GOOGLE] Error updating user name:', updateError)
+        return existingUser // 更新に失敗しても既存ユーザーを返す
+      }
+    } else {
+      console.log('✅ [GOOGLE] Creating new Google user')
+      try {
+        const database = await import('@/lib/database')
+        const db = database.default
+        
+        const result = await db.query(
+          'INSERT INTO users (email, name, role, password, created_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) RETURNING id, email, name, role, created_at',
+          [email, name, 'user', ''] // Google認証の場合、パスワードは空
+        )
+        
+        const newDbUser = result.rows[0]
+        const newUser: User = {
+          id: newDbUser.id,
+          email: newDbUser.email,
+          name: newDbUser.name,
+          role: newDbUser.role,
+          password: '',
+          created_at: new Date(newDbUser.created_at)
+        }
+        
+        console.log('✅ [GOOGLE] New user created:', { id: newUser.id, email: newUser.email, name: newUser.name })
+        return newUser
+      } catch (createError) {
+        console.error('❌ [GOOGLE] Error creating new user:', createError)
+        // Fallback to mock user creation
+        const newUser: User = {
+          id: Date.now().toString(),
+          email: email,
+          name: name,
+          role: 'user',
+          password: '',
+          created_at: new Date()
+        }
+        return newUser
+      }
+    }
+  } catch (error) {
+    console.error('❌ [GOOGLE] Error in createOrUpdateGoogleUser:', error)
+    return null
+  }
+}
+
+export const authConfig: NextAuthConfig = {
+  trustHost: true, // Required for NextAuth v5 in development
+  pages: {
+    signIn: '/login',
+    error: '/login',
+  },
+  debug: false, // Disable debug logs for performance
+  callbacks: {
+    async signIn({ user, account, profile }) {
+      // Google OAuth の場合、データベースにユーザーを作成/更新
+      if (account?.provider === 'google' && user.email && user.name) {
+        try {
+          const dbUser = await createOrUpdateGoogleUser(user.email, user.name)
+          if (dbUser) {
+            // ユーザーIDとロールを設定
+            user.id = dbUser.id.toString()
+            ;(user as any).role = dbUser.role
+            return true
+          }
+          return false
+        } catch (error) {
+          console.error('Error creating/updating Google user:', error)
+          return false
+        }
+      }
+      return true
+    },
+    jwt({ token, user, account }) {
+      // console.log('🔍 [JWT] JWT callback called:', { 
+      //   hasUser: !!user, 
+      //   hasAccount: !!account, 
+      //   tokenUserId: token.userId 
+      // })
+      
+      // Initial sign in - add custom fields
+      if (user) {
+        // console.log('✅ [JWT] Adding user data to token:', { 
+        //   id: user.id, 
+        //   email: user.email, 
+        //   name: user.name, 
+        //   role: (user as any).role 
+        // })
+        token.userId = user.id
+        token.email = user.email
+        token.name = user.name
+        token.role = (user as any).role || 'user'
+      }
+      return token
+    },
+    session({ session, token }) {
+      // console.log('🔍 [SESSION] Session callback called:', { 
+      //   hasToken: !!token, 
+      //   hasSession: !!session,
+      //   tokenUserId: token?.userId 
+      // })
+      
+      // Send properties to the client
+      if (token && session.user) {
+        // console.log('✅ [SESSION] Creating session with token data')
+        session.user.id = token.userId as string
+        session.user.email = token.email as string
+        session.user.name = token.name as string
+        ;(session.user as any).role = token.role as string
+        
+        // console.log('✅ [SESSION] Final session user:', {
+        //   id: session.user.id,
+        //   email: session.user.email,
+        //   name: session.user.name,
+        //   role: (session.user as any).role
+        // })
+      }
+      return session
+    },
+  },
+  providers: [
+    Credentials({
+      name: 'credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' }
+      },
+      async authorize(credentials) {
+        // console.log('🔍 [AUTH] Starting credential authorization...')
+        // console.log('🔍 [AUTH] Received credentials:', { 
+        //   email: credentials?.email, 
+        //   passwordLength: credentials?.password ? credentials.password.length : 0 
+        // })
+
+        if (!credentials?.email || !credentials?.password) {
+          // console.log('❌ [AUTH] Missing credentials - email or password empty')
+          return null
+        }
+
+        try {
+          // console.log('🔍 [AUTH] Querying database for user:', credentials.email)
+          const user = await getUserFromDatabase(credentials.email as string)
+          
+          if (!user) {
+            // console.log('❌ [AUTH] User not found in database:', credentials.email)
+            return null
+          }
+
+          // console.log('✅ [AUTH] User found:', { 
+          //   id: user.id, 
+          //   email: user.email, 
+          //   name: user.name, 
+          //   role: user.role,
+          //   hasPassword: !!user.password 
+          // })
+
+          // console.log('🔍 [AUTH] Comparing password...')
+          const isPasswordValid = await bcrypt.compare(
+            credentials.password as string,
+            user.password
+          )
+
+          // console.log('🔍 [AUTH] Password comparison result:', isPasswordValid)
+
+          if (!isPasswordValid) {
+            // console.log('❌ [AUTH] Password validation failed')
+            return null
+          }
+
+          // Return user object without password
+          const authUser = {
+            id: user.id.toString(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          }
+          
+          // console.log('✅ [AUTH] Authentication successful, returning user:', authUser)
+          return authUser
+        } catch (error) {
+          console.error('❌ [AUTH] Authentication error:', error)
+          return null
+        }
+      },
+    }),
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: {
+        params: {
+          prompt: "consent",
+          access_type: "offline",
+          response_type: "code"
+        }
+      }
+    }),
+  ],
+  session: {
+    strategy: 'jwt',
+    maxAge: 7 * 24 * 60 * 60, // 7 days
+  },
+  secret: process.env.NEXTAUTH_SECRET || process.env.JWT_SECRET || 'development-secret-key-for-nextauth',
+}

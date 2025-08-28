@@ -104,6 +104,84 @@
     p, div {
       min-font-size: 14px;
     }
+    
+    /* タッチフレンドリーなクリックエリア */
+    button, [role="button"], a, input[type="submit"], input[type="button"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+    
+    /* タッチデバイス用のホバーエフェクト無効化 */
+    @media (hover: none) {
+      .hover\\:bg-gray-100:hover {
+        background-color: initial;
+      }
+    }
+  }
+
+  /* アクセシビリティ: focus indicators */
+  .keyboard-user *:focus {
+    @apply outline-none ring-2 ring-blue-500 ring-offset-2;
+  }
+
+  /* Screen Reader Only */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .focus\\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: initial;
+    margin: initial;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+  /* High contrast mode support */
+  @media (prefers-contrast: high) {
+    .bg-gray-50 {
+      @apply bg-white border border-gray-900;
+    }
+    
+    .bg-gray-100 {
+      @apply bg-white border border-gray-900;
+    }
+    
+    .text-gray-600 {
+      @apply text-black;
+    }
+    
+    .text-gray-500 {
+      @apply text-black;
+    }
+  }
+
+  /* Reduced motion support */
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Dark mode base styles */
+  @media (prefers-color-scheme: dark) {
+    body {
+      @apply bg-gray-900 text-gray-100;
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../context/AuthContext';
 import { useInstagram } from '../hooks/useInstagram';
-import { Home, PlusCircle, Calendar, Settings, Zap, BarChart3, Menu, X } from 'lucide-react';
+import { Home, PlusCircle, Calendar, Settings, Zap, BarChart3, Menu, X, CreditCard, Code } from 'lucide-react';
 import ErrorBoundary from './ErrorBoundary';
 import LoadingSkeleton from './LoadingSkeleton';
 
@@ -49,6 +49,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView = 'dashboard' }) 
     { id: 'ai', label: 'AI Studio', icon: Zap, path: '/ai' },
     { id: 'schedule', label: 'スケジュール', icon: Calendar, path: '/schedule' },
     { id: 'analytics', label: '分析', icon: BarChart3, path: '/analytics' },
+    { id: 'pricing', label: '料金プラン', icon: CreditCard, path: '/pricing' },
+    { id: 'demo', label: '新機能デモ', icon: Code, path: '/demo' },
     { id: 'settings', label: '設定', icon: Settings, path: '/settings' },
   ];
 
